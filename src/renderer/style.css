@@ -1,0 +1,489 @@
+/* 色は 6 つだけ: 背景・面・罫線・文字・控えめな文字・差し色。
+   ライト / ダーク / システムの切り替えは main 側の nativeTheme.themeSource が
+   prefers-color-scheme を切り替えることで行う。 */
+:root {
+  color-scheme: light dark;
+  --bg: #faf9f5;
+  --surface: #f3f1ea;
+  --border: #e8e6dc;
+  --text: #141413;
+  --muted: #73716a;
+  --accent: #d97757;
+
+  --faint: #b0aea5;
+  --hover: rgba(20, 20, 19, 0.05);
+  --active-line: rgba(20, 20, 19, 0.035);
+  --selection: rgba(217, 119, 87, 0.2);
+  --syntax-command: #b4573a;
+  --pdf-bg: #ecebe4;
+
+  --font-ui: -apple-system, 'Hiragino Sans', 'Noto Sans JP', sans-serif;
+  --font-mono: 'SF Mono', Menlo, 'Hiragino Sans', monospace;
+  --titlebar: 40px;
+  --sidebar: 212px;
+  --split: 0.5;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #1b1b19;
+    --surface: #222220;
+    --border: #31302c;
+    --text: #e8e6dc;
+    --muted: #9a978e;
+    --accent: #d97757;
+
+    --faint: #5f5d57;
+    --hover: rgba(250, 249, 245, 0.06);
+    --active-line: rgba(250, 249, 245, 0.04);
+    --selection: rgba(217, 119, 87, 0.28);
+    --syntax-command: #e3906f;
+    --pdf-bg: #141413;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--text);
+  font: 13px/1.5 var(--font-ui);
+  -webkit-font-smoothing: antialiased;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+/* ---------- タイトルバー ---------- */
+
+#titlebar {
+  height: var(--titlebar);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 12px 0 84px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+  -webkit-app-region: drag;
+  user-select: none;
+}
+
+.crumbs {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  white-space: nowrap;
+}
+
+#folder-name {
+  font-weight: 600;
+}
+
+.crumb-sep,
+#file-name {
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+#dirty {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+  flex: none;
+}
+
+.status {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  -webkit-app-region: no-drag;
+  flex: none;
+}
+
+.auto {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--muted);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.auto input {
+  accent-color: var(--accent);
+  margin: 0;
+}
+
+#engine {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.status-pill {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  border-radius: 999px;
+  padding: 3px 11px 3px 9px;
+  font-size: 12px;
+  min-width: 96px;
+}
+
+/* 状態は差し色 1 色で表す: エラー = 塗り、警告 = 輪、組版中 = 点滅、それ以外 = 灰色 */
+.status-pill i {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--faint);
+}
+
+.status-pill[data-state='error'] i,
+.status-pill[data-state='building'] i {
+  background: var(--accent);
+}
+
+.status-pill[data-state='warning'] i {
+  background: transparent;
+  box-shadow: inset 0 0 0 1.5px var(--accent);
+}
+
+.status-pill[data-state='building'] i {
+  animation: pulse 0.9s ease-in-out infinite alternate;
+}
+
+@keyframes pulse {
+  from {
+    opacity: 0.25;
+  }
+}
+
+/* ---------- 3 列の作業領域 ---------- */
+
+#workspace {
+  height: calc(100% - var(--titlebar));
+  display: grid;
+  grid-template-columns: var(--sidebar) calc((100% - var(--sidebar)) * var(--split)) 5px 1fr;
+  grid-template-rows: minmax(0, 1fr);
+}
+
+#workspace > * {
+  min-height: 0;
+}
+
+body.no-sidebar #workspace {
+  --sidebar: 0px;
+}
+
+body.no-sidebar #sidebar {
+  display: none;
+}
+
+#sidebar {
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  overflow-y: auto;
+  padding: 10px 0 20px;
+}
+
+#file-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+#file-list li {
+  padding: 3px 14px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+#file-list li.dir {
+  color: var(--muted);
+  font-size: 11px;
+  margin-top: 10px;
+  direction: rtl;
+  text-align: left;
+}
+
+#file-list li.file {
+  cursor: default;
+  border-radius: 5px;
+  margin: 0 6px;
+  padding: 3px 10px 3px 14px;
+  position: relative;
+}
+
+#file-list li.file:hover {
+  background: var(--hover);
+}
+
+#file-list li.file.active {
+  background: var(--border);
+  font-weight: 600;
+}
+
+#file-list li.file.root::before {
+  content: '';
+  position: absolute;
+  left: 5px;
+  top: 50%;
+  width: 4px;
+  height: 4px;
+  margin-top: -2px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+#editor-col {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+#editor {
+  flex: 1;
+  min-height: 0;
+}
+
+#divider {
+  cursor: col-resize;
+  background: linear-gradient(to right, transparent 2px, var(--border) 2px, var(--border) 3px, transparent 3px);
+}
+
+#divider:hover,
+body.resizing #divider {
+  background: linear-gradient(to right, transparent 1px, var(--accent) 1px, var(--accent) 4px, transparent 4px);
+}
+
+body.resizing {
+  cursor: col-resize;
+  user-select: none;
+}
+
+body.resizing #preview-col {
+  pointer-events: none;
+}
+
+/* ---------- 問題の一覧 ---------- */
+
+#problems {
+  max-height: 34%;
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+}
+
+#problems[hidden] {
+  display: none;
+}
+
+#problems header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 12px 6px 16px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+#problems-close {
+  border: none;
+  background: none;
+  color: var(--muted);
+  font-size: 16px;
+  line-height: 1;
+  padding: 0 4px;
+}
+
+#problem-list {
+  list-style: none;
+  margin: 0;
+  padding: 0 0 8px;
+  overflow-y: auto;
+}
+
+#problem-list li {
+  display: flex;
+  gap: 12px;
+  padding: 4px 16px;
+  cursor: default;
+  font-size: 12.5px;
+}
+
+#problem-list li:hover {
+  background: var(--hover);
+}
+
+#problem-list li.info {
+  color: var(--muted);
+}
+
+#problem-list .where {
+  flex: none;
+  min-width: 128px;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  padding-left: 14px;
+  position: relative;
+}
+
+#problem-list .where::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 6px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--faint);
+}
+
+#problem-list .error .where::before {
+  background: var(--accent);
+}
+
+#problem-list .warning .where::before {
+  background: transparent;
+  box-shadow: inset 0 0 0 1.5px var(--accent);
+}
+
+#problem-list .msg {
+  word-break: break-word;
+}
+
+/* ---------- PDF（ページは紙の色のまま、周りだけテーマに合わせる） ---------- */
+
+#preview-col {
+  position: relative;
+  min-width: 0;
+  background: var(--pdf-bg);
+}
+
+#pdf-scroll {
+  position: absolute;
+  inset: 0;
+  overflow: auto;
+  padding: 20px;
+}
+
+#pdf-scroll .pages {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: max-content;
+  min-width: 100%;
+}
+
+.page {
+  position: relative;
+  background: #faf9f5;
+  box-shadow:
+    0 0 0 1px rgba(20, 20, 19, 0.08),
+    0 2px 10px rgba(20, 20, 19, 0.12);
+}
+
+.page canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.sync-mark {
+  position: absolute;
+  border-radius: 3px;
+  background: rgba(217, 119, 87, 0.22);
+  outline: 2px solid rgba(217, 119, 87, 0.7);
+  pointer-events: none;
+  animation: sync-fade 1.6s ease-out forwards;
+}
+
+@keyframes sync-fade {
+  0%,
+  60% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+#pdf-hint {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 10px;
+  margin: 0;
+  text-align: center;
+  font-size: 11px;
+  color: var(--muted);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+body.has-pdf #preview-col:hover #pdf-hint {
+  opacity: 0.85;
+}
+
+/* ---------- 何も開いていないとき ---------- */
+
+#welcome {
+  display: none;
+}
+
+body.empty #workspace,
+body.empty .status {
+  display: none;
+}
+
+body.empty #welcome {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: calc(100% - var(--titlebar));
+  padding-bottom: 6vh;
+  color: var(--muted);
+}
+
+.welcome-title {
+  font-size: 28px;
+  font-weight: 600;
+  color: var(--text);
+  margin: 0 0 6px;
+  letter-spacing: 0.02em;
+}
+
+#open-folder {
+  margin-top: 14px;
+  border: none;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #faf9f5;
+  padding: 8px 18px;
+  font-weight: 600;
+}
+
+#open-folder kbd {
+  font: inherit;
+  opacity: 0.75;
+  margin-left: 6px;
+}

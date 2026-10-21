@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; worker-src 'self' blob:" />
+    <title>Sumi</title>
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <header id="titlebar">
+      <div class="crumbs">
+        <span id="folder-name"></span>
+        <span class="crumb-sep" id="crumb-sep" hidden>/</span>
+        <span id="file-name"></span>
+        <span id="dirty" title="未保存" hidden></span>
+      </div>
+      <div class="status">
+        <label class="auto" title="入力が止まったら自動で保存して組版する">
+          <input type="checkbox" id="auto" /> <span>自動組版</span>
+        </label>
+        <span id="engine"></span>
+        <button id="status" class="status-pill" data-state="idle"><i></i><span id="status-text">待機中</span></button>
+      </div>
+    </header>
+
+    <div id="welcome">
+      <p class="welcome-title">Sumi</p>
+      <p>LaTeX のフォルダを開くと、左で書いて右で PDF を確認できます。</p>
+      <button id="open-folder">フォルダを開く <kbd>⌘O</kbd></button>
+    </div>
+
+    <main id="workspace">
+      <nav id="sidebar">
+        <ul id="file-list"></ul>
+      </nav>
+
+      <section id="editor-col">
+        <div id="editor"></div>
+        <section id="problems" hidden>
+          <header><span id="problems-title">問題</span><button id="problems-close" title="閉じる (⇧⌘M)">×</button></header>
+          <ul id="problem-list"></ul>
+        </section>
+      </section>
+
+      <div id="divider" title="ドラッグで幅を変える"></div>
+
+      <section id="preview-col">
+        <div id="pdf-scroll"></div>
+        <p id="pdf-hint">⌘ クリックでソースへ　⌘J でカーソル位置を表示</p>
+      </section>
+    </main>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>
