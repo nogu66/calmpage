@@ -4,6 +4,8 @@ import { existsSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 import { basename, dirname, extname, join, resolve } from 'node:path'
 import { app } from 'electron'
+import { t, type Key } from '../shared/i18n'
+import { loadSettings } from './settings'
 
 export type Engine = 'lualatex' | 'uplatex' | 'xelatex' | 'pdflatex'
 
@@ -43,6 +45,10 @@ const PDF_MODE_LABEL: Record<string, string> = {
 // TeX のログは既定で 79 字ごとに折り返され、パスやメッセージが途中で切れる。
 // 折り返しを無くしておくと、ログを 1 行ずつ素直に読める。
 const TEX_ENV = { max_print_line: '10000', error_line: '254', half_error_line: '238' }
+
+function tr(key: Key, params?: Record<string, string>): string {
+  return t(loadSettings().language, key, params)
+}
 
 export function hasDocumentClass(src: string): boolean {
   return /^[^%\n]*\\documentclass/m.test(src)
@@ -173,7 +179,7 @@ export async function build(root: string): Promise<BuildResult> {
   const diagnostics = parseLog(log, cwd, root)
   if (code !== 0 && !diagnostics.some((d) => d.severity === 'error')) {
     const tail = output.trim().split('\n').slice(-6).join('\n')
-    diagnostics.unshift({ file: null, line: null, severity: 'error', message: code === -1 ? `latexmk を起動できません: ${tail}` : tail })
+    diagnostics.unshift({ file: null, line: null, severity: 'error', message: code === -1 ? tr('build.noLatexmk', { detail: tail }) : tail })
   }
   await recordDependencies(root, resolve(cwd, auxDir))
 
@@ -241,12 +247,12 @@ export function parseLog(log: string, cwd: string, root: string): Diagnostic[] {
       }
       const box = text.match(/^(Overfull|Underfull) \\[hv]box \((.+?)\).*?lines? (\d+)/)
       if (box && box[1] === 'Overfull') {
-        push({ file: file ?? root, line: Number(box[3]), severity: 'info', message: `はみ出し (${box[2]})` })
+        push({ file: file ?? root, line: Number(box[3]), severity: 'info', message: tr('build.overfull', { amount: box[2] }) })
       }
     }
     i++
   }
-  if (/^No pages of output\./m.test(log)) push({ file: root, line: null, severity: 'error', message: 'PDF が 1 ページも出力されませんでした' })
+  if (/^No pages of output\./m.test(log)) push({ file: root, line: null, severity: 'error', message: tr('build.noPages') })
 
   const rank = { error: 0, warning: 1, info: 2 }
   return out.sort((a, b) => rank[a.severity] - rank[b.severity])

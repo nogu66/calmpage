@@ -1,5 +1,7 @@
 import type { BuildResult, Diagnostic } from '../main/build'
+import type { Settings } from '../main/settings'
 import type { SumiApi } from '../preload'
+import { t, type Key } from '../shared/i18n'
 import { Editor } from './editor'
 import { Preview } from './preview'
 
@@ -20,6 +22,13 @@ let diagnostics: Diagnostic[] = []
 let lastRoot: string | null = null
 let autoBuild = true
 let autoTimer = 0
+let settings: Settings
+
+type StatusState = 'idle' | 'building' | 'ok' | 'error' | 'warning'
+let status: { state: StatusState; key: Key; params: Record<string, string | number> } = { state: 'idle', key: 'status.idle', params: {} }
+let pdfNote: { key: Key; params: Record<string, string | number> } | null = null
+
+const tr = (key: Key, params?: Record<string, string | number>): string => t(settings?.language ?? 'en', key, params)
 
 const editor = new Editor($('editor'), onEdit)
 const preview = new Preview($('pdf-scroll'), (page, x, y) => void backwardSync(page, x, y))
@@ -34,9 +43,22 @@ function baseName(path: string): string {
   return path.slice(path.lastIndexOf('/') + 1)
 }
 
-function setStatus(state: 'idle' | 'building' | 'ok' | 'error' | 'warning', text: string): void {
+function setStatus(state: StatusState, key: Key, params: Record<string, string | number> = {}): void {
+  status = { state, key, params }
   $('status').dataset.state = state
-  $('status-text').textContent = text
+  $('status-text').textContent = tr(key, params)
+}
+
+// PDF の代わりにプレビューの真ん中へ出す一言。null で消す。
+function setPdfNote(key: Key | null, params: Record<string, string | number> = {}): void {
+  pdfNote = key ? { key, params } : null
+  $('pdf-note').hidden = !pdfNote
+  $('pdf-note').textContent = pdfNote ? tr(pdfNote.key, pdfNote.params) : ''
+}
+
+function clearPreview(): void {
+  preview.clear()
+  document.body.classList.remove('has-pdf')
 }
 
 function updateDirty(): void {
@@ -126,17 +148,23 @@ function onEdit(): void {
   if (autoBuild) autoTimer = window.setTimeout(() => void save(), AUTO_BUILD_DELAY)
 }
 
+// 本体が別の書類に変わったら、前の書類の PDF はすぐ消す（新しい PDF ができるまで残すと取り違える）。
+function onBuildStarted(root: string): void {
+  setStatus('building', 'status.compiling')
+  if (root === lastRoot) return
+  lastRoot = root
+  markActiveFile()
+  clearPreview()
+  setPdfNote('pdf.compiling', { file: baseName(root) })
+}
+
 async function onBuildFinished(result: BuildResult | null, file: string, error?: string): Promise<void> {
   if (!result) {
-    setStatus('error', error ? '組版できません' : '本体が見つかりません')
-    diagnostics = [
-      {
-        file,
-        line: null,
-        severity: 'error',
-        message: error ?? `${baseName(file)} を読み込んでいる本体の .tex が見つかりません。先頭に「% !TEX root = 本体.tex」と書くと指定できます。`
-      }
-    ]
+    lastRoot = null
+    clearPreview()
+    setPdfNote('pdf.none')
+    setStatus('error', error ? 'status.cannotCompile' : 'status.noRoot')
+    diagnostics = [{ file, line: null, severity: 'error', message: error ?? tr('problem.noRoot', { file: baseName(file) }) }]
     renderProblems(true)
     return
   }
@@ -148,9 +176,9 @@ async function onBuildFinished(result: BuildResult | null, file: string, error?:
   const errors = diagnostics.filter((d) => d.severity === 'error').length
   const warnings = diagnostics.filter((d) => d.severity === 'warning').length
   const seconds = (result.durationMs / 1000).toFixed(1)
-  if (errors) setStatus('error', `エラー ${errors} 件`)
-  else if (warnings) setStatus('warning', `警告 ${warnings} 件 · ${seconds}秒`)
-  else setStatus('ok', `完了 · ${seconds}秒`)
+  if (errors) setStatus('error', 'status.errors', { n: errors })
+  else if (warnings) setStatus('warning', 'status.warnings', { n: warnings, s: seconds })
+  else setStatus('ok', 'status.done', { s: seconds })
 
   renderProblems(errors > 0)
   showEditorDiagnostics()
@@ -158,11 +186,13 @@ async function onBuildFinished(result: BuildResult | null, file: string, error?:
   if (result.pdf) {
     try {
       await preview.load(await sumi.readPdf(result.pdf))
-      document.body.classList.add('has-pdf')
     } catch (err) {
       console.error('PDF の読み込みに失敗', err)
     }
   }
+  if (result.root !== lastRoot) return // 読み込み中に別の書類へ移った
+  document.body.classList.toggle('has-pdf', preview.loaded)
+  setPdfNote(preview.loaded ? null : 'pdf.none')
 }
 
 // ---------- 問題の一覧 ----------
@@ -184,7 +214,7 @@ function renderProblems(open: boolean): void {
     li.className = d.severity
     const where = document.createElement('span')
     where.className = 'where'
-    where.textContent = d.file ? `${baseName(d.file)}${d.line ? `:${d.line}` : ''}` : '文書全体'
+    where.textContent = d.file ? `${baseName(d.file)}${d.line ? `:${d.line}` : ''}` : tr('problem.document')
     const msg = document.createElement('span')
     msg.className = 'msg'
     msg.textContent = d.message
@@ -192,7 +222,7 @@ function renderProblems(open: boolean): void {
     if (d.file) li.addEventListener('click', () => void openFile(d.file as string, d.line ?? undefined))
     list.append(li)
   }
-  $('problems-title').textContent = diagnostics.length ? `問題 ${diagnostics.length} 件` : '問題はありません'
+  $('problems-title').textContent = diagnostics.length ? tr('problems.title', { n: diagnostics.length }) : tr('problems.none')
   if (open) $('problems').hidden = false
   if (!diagnostics.some((d) => d.severity !== 'info')) $('problems').hidden = true
 }
@@ -260,6 +290,8 @@ function handleMenu(command: string): void {
     case 'toggle-problems':
       $('problems').hidden = !$('problems').hidden
       return
+    case 'settings':
+      return openSettings()
     case 'zoom-in':
       preview.setZoom(preview.zoom * 1.15)
       break
@@ -277,10 +309,10 @@ async function onFolderOpened(next: string, file: string | null): Promise<void> 
   folder = next
   lastRoot = null
   diagnostics = []
-  preview.clear()
-  document.body.classList.remove('has-pdf')
+  clearPreview()
+  setPdfNote(null)
   renderProblems(false)
-  setStatus('idle', '待機中')
+  setStatus('idle', 'status.idle')
   $('engine').textContent = ''
   await refreshFiles()
   updateTitle()
@@ -296,19 +328,71 @@ async function onFileChanged(path: string, content: string): Promise<void> {
   if (editor.path) sumi.requestBuild(editor.path)
 }
 
-async function init(): Promise<void> {
-  const settings = await sumi.initial()
-  document.documentElement.dataset.palette = settings.palette
-  sumi.onPalette((palette) => (document.documentElement.dataset.palette = palette))
-  autoBuild = settings.auto
-  $<HTMLInputElement>('auto').checked = autoBuild
-  $<HTMLInputElement>('auto').addEventListener('change', (e) => {
-    autoBuild = (e.target as HTMLInputElement).checked
-    sumi.saveSettings({ auto: autoBuild })
+// ---------- 設定と言語 ----------
+
+function applyLanguage(): void {
+  for (const el of document.querySelectorAll<HTMLElement>('[data-i18n]')) el.textContent = tr(el.dataset.i18n as Key)
+  for (const el of document.querySelectorAll<HTMLElement>('[data-i18n-title]')) el.title = tr(el.dataset.i18nTitle as Key)
+  for (const el of document.querySelectorAll<HTMLElement>('[data-i18n-aria]')) el.setAttribute('aria-label', tr(el.dataset.i18nAria as Key))
+  $('status-text').textContent = tr(status.key, status.params)
+  if (pdfNote) setPdfNote(pdfNote.key, pdfNote.params)
+  renderProblems(false)
+}
+
+// main から届いた設定を画面に映す（メニューと設定画面のどちらで変えてもここを通る）
+function applySettings(next: Settings): void {
+  const languageChanged = settings?.language !== next.language
+  settings = next
+  document.documentElement.dataset.palette = next.palette
+  document.documentElement.lang = next.language
+  autoBuild = next.auto
+  $<HTMLInputElement>('auto').checked = next.auto
+  $<HTMLInputElement>('settings-auto').checked = next.auto
+  for (const group of document.querySelectorAll<HTMLElement>('[data-setting]')) {
+    const value = next[group.dataset.setting as 'language' | 'theme' | 'palette']
+    for (const button of group.querySelectorAll<HTMLButtonElement>('button')) {
+      button.setAttribute('aria-pressed', String(button.dataset.value === value))
+    }
+  }
+  if (languageChanged) applyLanguage()
+}
+
+function openSettings(): void {
+  $('settings').hidden = false
+  $('settings-close').focus()
+}
+
+function closeSettings(): void {
+  $('settings').hidden = true
+}
+
+function setupSettings(): void {
+  $('open-settings').addEventListener('click', openSettings)
+  $('settings-close').addEventListener('click', closeSettings)
+  $('settings').addEventListener('click', (e) => {
+    if (e.target === $('settings')) closeSettings()
   })
-  setSplit(settings.split)
-  document.body.classList.toggle('no-sidebar', !settings.sidebar)
-  preview.zoom = settings.zoom
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && !$('settings').hidden) closeSettings()
+  })
+  for (const group of document.querySelectorAll<HTMLElement>('[data-setting]')) {
+    for (const button of group.querySelectorAll<HTMLButtonElement>('button')) {
+      button.addEventListener('click', () => sumi.updateSettings({ [group.dataset.setting as string]: button.dataset.value }))
+    }
+  }
+  for (const id of ['auto', 'settings-auto']) {
+    $<HTMLInputElement>(id).addEventListener('change', (e) => sumi.updateSettings({ auto: (e.target as HTMLInputElement).checked }))
+  }
+}
+
+async function init(): Promise<void> {
+  const initial = await sumi.initial()
+  applySettings(initial)
+  sumi.onSettings(applySettings)
+  setupSettings()
+  setSplit(initial.split)
+  document.body.classList.toggle('no-sidebar', !initial.sidebar)
+  preview.zoom = initial.zoom
   setupDivider()
 
   $('open-folder').addEventListener('click', () => void sumi.chooseFolder())
@@ -318,12 +402,12 @@ async function init(): Promise<void> {
   sumi.onMenu(handleMenu)
   sumi.onFolderOpened((f, file) => void onFolderOpened(f, file))
   sumi.onFileChanged((p, c) => void onFileChanged(p, c))
-  sumi.onBuildStarted(() => setStatus('building', '組版中…'))
+  sumi.onBuildStarted(onBuildStarted)
   sumi.onBuildFinished((r, f, err) => void onBuildFinished(r, f, err))
 
   window.addEventListener('beforeunload', () => void saveText())
 
-  if (settings.folder) await onFolderOpened(settings.folder, settings.file && settings.file.startsWith(settings.folder) ? settings.file : null)
+  if (initial.folder) await onFolderOpened(initial.folder, initial.file && initial.file.startsWith(initial.folder) ? initial.file : null)
   else updateTitle()
 }
 

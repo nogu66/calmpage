@@ -26,6 +26,7 @@ export class Preview {
   private scale = 1
   private observer: IntersectionObserver
   private visible = new Set<PageView>()
+  private generation = 0
   zoom = 1
 
   constructor(
@@ -44,7 +45,9 @@ export class Preview {
   }
 
   // 新しい PDF を読み込む。見えているページを描き終えてから差し替えるので、組み直してもちらつかない。
+  // 読み込み中に clear() されたら、描き終えても差し替えない（別の書類の PDF を出さないため）。
   async load(data: Uint8Array): Promise<void> {
+    const generation = this.generation
     const task = getDocument({ data })
     const doc = await task.promise
     const pages = await Promise.all(Array.from({ length: doc.numPages }, (_, i) => doc.getPage(i + 1)))
@@ -59,6 +62,10 @@ export class Preview {
     const firstVisible = Math.min(views.length - 1, Math.floor(ratio * views.length))
     await Promise.all(views.slice(Math.max(0, firstVisible - 1), firstVisible + 2).map((v) => this.render(v, scale)))
 
+    if (generation !== this.generation) {
+      void task.destroy()
+      return
+    }
     for (const v of this.pages) this.observer.unobserve(v.el)
     this.visible.clear()
     const old = this.task
@@ -73,6 +80,7 @@ export class Preview {
   }
 
   clear(): void {
+    this.generation++
     for (const v of this.pages) this.observer.unobserve(v.el)
     this.pages = []
     this.visible.clear()

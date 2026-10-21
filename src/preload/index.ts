@@ -1,6 +1,6 @@
 import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron'
 import type { BuildResult, SyncBox } from '../main/build'
-import type { Palette, Settings } from '../main/settings'
+import type { Settings } from '../main/settings'
 
 function on<T extends unknown[]>(channel: string, cb: (...args: T) => void): () => void {
   const listener = (_e: IpcRendererEvent, ...args: unknown[]): void => cb(...(args as T))
@@ -22,13 +22,14 @@ const api = {
   backwardSync: (page: number, x: number, y: number): Promise<{ file: string; line: number } | null> =>
     ipcRenderer.invoke('sync:backward', page, x, y),
   saveSettings: (patch: Partial<Settings>): void => ipcRenderer.send('settings:save', patch),
+  updateSettings: (patch: Partial<Settings>): void => ipcRenderer.send('settings:update', patch),
 
   onFolderOpened: (cb: (folder: string, file: string | null) => void) => on('folder:opened', cb),
   onFileChanged: (cb: (path: string, content: string) => void) => on('file:changed', cb),
   onBuildStarted: (cb: (root: string) => void) => on('build:started', cb),
   onBuildFinished: (cb: (result: BuildResult | null, file: string, error?: string) => void) => on('build:finished', cb),
   onMenu: (cb: (command: string) => void) => on('menu', cb),
-  onPalette: (cb: (palette: Palette) => void) => on('palette', cb)
+  onSettings: (cb: (settings: Settings) => void) => on('settings:changed', cb)
 }
 
 export type SumiApi = typeof api

@@ -304,9 +304,10 @@ body.no-sidebar #sidebar {
   visibility: hidden;
 }
 
+/* 左下に設定ボタンを置くので、ファイル一覧の下に余白を空けておく */
 #sidebar {
   overflow-y: auto;
-  padding: 6px 4px 20px 8px;
+  padding: 6px 4px 52px 8px;
 }
 
 #file-list {
@@ -557,6 +558,22 @@ body.resizing #preview-col {
   transition: opacity 0.2s;
 }
 
+#pdf-note {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  font-size: 12px;
+  color: var(--muted);
+  pointer-events: none;
+}
+
+#pdf-note[hidden] {
+  display: none;
+}
+
 body.has-pdf #preview-col:hover #pdf-hint {
   opacity: 0.85;
 }
@@ -604,4 +621,225 @@ body.empty #welcome {
   font: inherit;
   opacity: 0.75;
   margin-left: 6px;
+}
+
+/* ---------- 左下の設定ボタン ---------- */
+
+.icon-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+}
+
+.icon-button:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+
+#open-settings {
+  position: fixed;
+  left: 12px;
+  bottom: 12px;
+  z-index: 5;
+}
+
+body.no-sidebar:not(.empty) #open-settings {
+  display: none;
+}
+
+/* ---------- 設定のシート ---------- */
+
+.sheet-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 12vh;
+  background: rgba(20, 20, 19, 0.16);
+}
+
+.sheet-backdrop[hidden] {
+  display: none;
+}
+
+.sheet {
+  width: 460px;
+  max-width: calc(100% - 32px);
+  background: var(--raised);
+  border-radius: 14px;
+  box-shadow:
+    0 0 0 1px var(--border),
+    0 18px 50px rgba(20, 20, 19, 0.18);
+  padding: 18px 24px 22px;
+}
+
+@media (prefers-color-scheme: dark) {
+  .sheet-backdrop {
+    background: rgba(0, 0, 0, 0.45);
+  }
+
+  .sheet {
+    box-shadow:
+      0 0 0 1px var(--border),
+      0 18px 50px rgba(0, 0, 0, 0.5);
+  }
+}
+
+.sheet-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+.sheet-head h2 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.sheet-done {
+  border: none;
+  border-radius: 7px;
+  background: var(--hover);
+  padding: 5px 12px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.sheet h3 {
+  margin: 18px 0 2px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+  letter-spacing: 0.02em;
+}
+
+.setting-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 11px 0;
+  border-top: 1px solid var(--border);
+}
+
+.setting-hint {
+  margin: 2px 0 0;
+  font-size: 11.5px;
+  color: var(--muted);
+}
+
+.segmented {
+  display: inline-flex;
+  padding: 2px;
+  border-radius: 8px;
+  background: var(--hover);
+}
+
+.segmented button {
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  padding: 4px 12px;
+  font-size: 12px;
+}
+
+.segmented button[aria-pressed='true'] {
+  background: var(--card);
+  color: var(--text);
+  font-weight: 600;
+  box-shadow: 0 0 0 1px var(--border), 0 1px 2px rgba(20, 20, 19, 0.08);
+}
+
+.swatches {
+  display: flex;
+  gap: 14px;
+}
+
+.swatches button {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font-size: 11.5px;
+  padding: 0;
+}
+
+.swatches button[aria-pressed='true'] {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.swatch {
+  display: block;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 1px rgba(20, 20, 19, 0.12);
+}
+
+.swatches button[aria-pressed='true'] .swatch {
+  outline: 2px solid var(--text);
+  outline-offset: 2px;
+}
+
+/* 見本は地の色と差し色を斜めに分けて見せる（明るさに関係なくライトの色で示す） */
+.swatch-paper {
+  background: linear-gradient(135deg, #fbfbfa 50%, #1a1a1a 50%);
+}
+
+.swatch-moss {
+  background: linear-gradient(135deg, #e3e7df 50%, #56704d 50%);
+}
+
+.swatch-sand {
+  background: linear-gradient(135deg, #ebe8e1 50%, #b5603f 50%);
+}
+
+.switch {
+  appearance: none;
+  flex: none;
+  position: relative;
+  width: 32px;
+  height: 19px;
+  margin: 0;
+  border-radius: 999px;
+  background: var(--faint);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.switch::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  background: #fbfbfa;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+  transition: transform 0.15s;
+}
+
+.switch:checked {
+  background: var(--accent);
+}
+
+.switch:checked::after {
+  transform: translateX(13px);
+  background: var(--on-accent);
 }

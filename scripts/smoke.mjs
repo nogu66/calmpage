@@ -2,7 +2,7 @@
 // 使い方: npm run build && node scripts/smoke.mjs <LaTeX のフォルダ> <スクリーンショットの出力先>
 // フォルダの中身は書き換わるので、必ずコピーを渡すこと。
 import { _electron as electron } from 'playwright-core'
-import { appendFileSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
+import { appendFileSync, mkdtempSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 
@@ -79,13 +79,13 @@ await page.keyboard.press('Meta+z')
 await page.keyboard.press('Meta+z')
 await page.waitForTimeout(300)
 const restored = (await page.evaluate(() => document.querySelector('.cm-content').innerText)).includes('undefinedmacroxyz') === false
-if (!restored) await clickMenu('保存して組版')
+if (!restored) await clickMenu('Save and Compile')
 await page.waitForFunction(() => document.querySelector('#status').dataset.state === 'building', null, { timeout: 10_000 }).catch(() => {})
 state = await waitStatus(['ok', 'warning', 'error'])
 check('元に戻して再組版', state !== 'error' && !readFileSync(filePath, 'utf8').includes('undefinedmacroxyz'), state)
 
 // 4. ⌘J: カーソル位置を PDF で表示
-await clickMenu('カーソル位置を PDF で表示')
+await clickMenu('Show Cursor in PDF')
 const mark = await page.waitForSelector('.sync-mark', { timeout: 5000 }).then(() => true).catch(() => false)
 check('ソース → PDF', mark)
 await page.screenshot({ path: join(shots, '3-forward.png') })
@@ -119,6 +119,51 @@ try {
 } catch {
   check('外部の変更で再組版', false, 'tex/profile.tex がない')
 }
+
+// 6b. 別の書類に切り替えたら、前の書類の PDF はすぐ消え、新しい PDF に替わる
+const other = join(folder, 'smoke-other.tex')
+writeFileSync(other, '\\documentclass{article}\n\\begin{document}\nOther document.\n\\end{document}\n')
+const otherItem = page.locator(`#file-list li[data-path="${other}"]`)
+await otherItem.waitFor({ timeout: 8000 })
+await waitStatus(['ok', 'warning', 'error'])
+await otherItem.click()
+await page.waitForFunction(() => document.querySelector('#status').dataset.state === 'building', null, { timeout: 8000 }).catch(() => {})
+const cleared = await page.evaluate(() => ({
+  pages: document.querySelectorAll('#pdf-scroll .page').length,
+  note: document.querySelector('#pdf-note').hidden ? '' : document.querySelector('#pdf-note').textContent
+}))
+await waitStatus(['ok', 'warning', 'error'])
+await page.waitForTimeout(500)
+const switched = await page.evaluate(() => ({
+  pages: document.querySelectorAll('#pdf-scroll .page').length,
+  noteHidden: document.querySelector('#pdf-note').hidden
+}))
+check(
+  '別の書類で前の PDF を消す',
+  cleared.pages === 0 && /smoke-other/.test(cleared.note) && switched.pages === 1 && switched.noteHidden,
+  `切替直後 ${cleared.pages} ページ「${cleared.note}」→ 完了後 ${switched.pages} ページ`
+)
+await page.locator(`#file-list li[data-path="${filePath}"]`).click()
+await page.waitForFunction(() => document.querySelector('#status').dataset.state === 'building', null, { timeout: 8000 }).catch(() => {})
+await waitStatus(['ok', 'warning', 'error'])
+unlinkSync(other)
+
+// 7. 左下の設定ボタン → 言語と配色の切り替え
+await page.locator('#open-settings').click()
+const sheetOpen = await page.locator('#settings').isVisible()
+const englishStatus = await page.locator('#status-text').textContent()
+await page.locator('[data-setting="language"] button[data-value="ja"]').click()
+await page.waitForTimeout(300)
+const japaneseStatus = await page.locator('#status-text').textContent()
+const menuJa = await app.evaluate(({ Menu }) => Menu.getApplicationMenu().items.map((i) => i.label).join(' / '))
+check('設定画面が開く', sheetOpen)
+check('日本語に切り替え', /完了|警告|エラー/.test(japaneseStatus) && menuJa.includes('ファイル'), `${englishStatus} → ${japaneseStatus} / ${menuJa}`)
+await page.locator('[data-setting="palette"] button[data-value="moss"]').click()
+await page.waitForTimeout(200)
+check('配色の切り替え', (await page.evaluate(() => document.documentElement.dataset.palette)) === 'moss')
+await page.screenshot({ path: join(shots, '5-settings.png') })
+await page.keyboard.press('Escape')
+check('Esc で閉じる', !(await page.locator('#settings').isVisible()))
 
 check('コンソールにエラーなし', errors.length === 0, errors.slice(0, 3).join(' | '))
 await page.screenshot({ path: join(shots, '4-final.png') })

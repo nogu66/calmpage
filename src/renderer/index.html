@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="ja">
+<html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; worker-src 'self' blob:" />
@@ -12,21 +12,21 @@
         <span id="folder-name"></span>
         <span class="crumb-sep" id="crumb-sep" hidden>/</span>
         <span id="file-name"></span>
-        <span id="dirty" title="未保存" hidden></span>
+        <span id="dirty" data-i18n-title="title.unsaved" hidden></span>
       </div>
       <div class="status">
-        <label class="auto" title="入力が止まったら自動で保存して組版する">
-          <input type="checkbox" id="auto" /> <span>Auto compile</span>
+        <label class="auto" data-i18n-title="auto.hint">
+          <input type="checkbox" id="auto" /> <span data-i18n="auto.label"></span>
         </label>
         <span id="engine"></span>
-        <button id="status" class="status-pill" data-state="idle"><i></i><span id="status-text">待機中</span></button>
+        <button id="status" class="status-pill" data-state="idle"><i></i><span id="status-text"></span></button>
       </div>
     </header>
 
     <div id="welcome">
       <p class="welcome-title">Sumi</p>
-      <p>LaTeX のフォルダを開くと、左で書いて右で PDF を確認できます。</p>
-      <button id="open-folder">フォルダを開く <kbd>⌘O</kbd></button>
+      <p data-i18n="welcome.body"></p>
+      <button id="open-folder"><span data-i18n="welcome.open"></span> <kbd>⌘O</kbd></button>
     </div>
 
     <main id="workspace">
@@ -37,18 +37,69 @@
       <section id="editor-col">
         <div id="editor"></div>
         <section id="problems" hidden>
-          <header><span id="problems-title">問題</span><button id="problems-close" title="閉じる (⇧⌘M)">×</button></header>
+          <header><span id="problems-title"></span><button id="problems-close" data-i18n-title="problems.close" data-i18n-aria="problems.close">×</button></header>
           <ul id="problem-list"></ul>
         </section>
       </section>
 
-      <div id="divider" title="ドラッグで幅を変える"></div>
+      <div id="divider" data-i18n-title="divider.hint"></div>
 
       <section id="preview-col">
         <div id="pdf-scroll"></div>
-        <p id="pdf-hint">⌘ クリックでソースへ　⌘J でカーソル位置を表示</p>
+        <p id="pdf-note" hidden></p>
+        <p id="pdf-hint" data-i18n="pdf.hint"></p>
       </section>
     </main>
+
+    <button id="open-settings" class="icon-button" data-i18n-title="settings.button" data-i18n-aria="settings.button">
+      <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" />
+        <circle cx="12" cy="12" r="3" />
+      </svg>
+    </button>
+
+    <div id="settings" class="sheet-backdrop" hidden>
+      <section class="sheet" role="dialog" aria-modal="true" aria-labelledby="settings-title">
+        <header class="sheet-head">
+          <h2 id="settings-title" data-i18n="settings.title"></h2>
+          <button id="settings-close" class="sheet-done" data-i18n="settings.close"></button>
+        </header>
+
+        <h3 data-i18n="settings.general"></h3>
+        <div class="setting-row">
+          <span data-i18n="settings.language"></span>
+          <div class="segmented" data-setting="language">
+            <button data-value="en">English</button>
+            <button data-value="ja">日本語</button>
+          </div>
+        </div>
+        <div class="setting-row">
+          <div>
+            <label for="settings-auto" data-i18n="settings.autoCompile"></label>
+            <p class="setting-hint" data-i18n="settings.autoCompileHint"></p>
+          </div>
+          <input type="checkbox" id="settings-auto" class="switch" />
+        </div>
+
+        <h3 data-i18n="settings.appearance"></h3>
+        <div class="setting-row">
+          <span data-i18n="settings.theme"></span>
+          <div class="segmented" data-setting="theme">
+            <button data-value="system" data-i18n="theme.system"></button>
+            <button data-value="light" data-i18n="theme.light"></button>
+            <button data-value="dark" data-i18n="theme.dark"></button>
+          </div>
+        </div>
+        <div class="setting-row">
+          <span data-i18n="settings.palette"></span>
+          <div class="swatches" data-setting="palette">
+            <button data-value="paper"><i class="swatch swatch-paper"></i><span data-i18n="palette.paper"></span></button>
+            <button data-value="moss"><i class="swatch swatch-moss"></i><span data-i18n="palette.moss"></span></button>
+            <button data-value="sand"><i class="swatch swatch-sand"></i><span data-i18n="palette.sand"></span></button>
+          </div>
+        </div>
+      </section>
+    </div>
     <script type="module" src="./main.ts"></script>
   </body>
 </html>

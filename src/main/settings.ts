@@ -1,6 +1,7 @@
 import { readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { app } from 'electron'
+import type { Lang } from '../shared/i18n'
 
 export type Theme = 'system' | 'light' | 'dark'
 export type Palette = 'paper' | 'moss' | 'sand'
@@ -14,9 +15,10 @@ export interface Settings {
   sidebar: boolean
   theme: Theme
   palette: Palette
+  language: Lang
 }
 
-const DEFAULTS: Settings = { folder: null, file: null, zoom: 1, auto: true, split: 0.5, sidebar: true, theme: 'system', palette: 'paper' }
+const DEFAULTS: Settings = { folder: null, file: null, zoom: 1, auto: true, split: 0.5, sidebar: true, theme: 'system', palette: 'paper', language: 'en' }
 
 function path(): string {
   return join(app.getPath('userData'), 'settings.json')

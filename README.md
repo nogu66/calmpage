@@ -22,15 +22,18 @@ npm run dist     # release/mac-arm64/Sumi.app を作る
 | PDF からソースへ | PDF を ⌘ クリック |
 | ファイル一覧 / 問題の一覧 | ⌘B / ⇧⌘M |
 | PDF の拡大・縮小・幅に合わせる | ⌘= / ⌘- / ⌘0 |
-| 明るさ（システム / ライト / ダーク） | 表示 → 明るさ |
-| 配色（紙〈標準〉/ 苔 / 砂） | 表示 → 配色 |
+| 設定（言語・Auto compile・明るさ・配色） | ⌘, または左下の歯車 |
+| 明るさ（System / Light / Dark）・配色（Paper〈標準〉/ Moss / Sand） | 設定、または View メニュー |
 | PDF をプレビュー.app で開く | ⇧⌘O |
+
+表示は英語が標準。設定の Language で日本語に切り替えられる（文言は `src/shared/i18n.ts`）。
 
 ## 組版の決まり
 
 - 本体の決め方: `% !TEX root = …` → `\documentclass` があればそのファイル → 前回組んだ本体が読み込んでいるファイル（.fls の記録）→ `\input` で読み込んでいる本体を探す。
 - `.latexmkrc` があるフォルダは、その設定（処理系・出力先・TEXINPUTS）に従う。
 - 無いフォルダは処理系を自動で選び（ltjs* / luatexja → LuaLaTeX、jsarticle 系 → upLaTeX、fontspec → XeLaTeX、日本語を含む → LuaLaTeX、それ以外 → pdfLaTeX）、中間ファイルは `~/Library/Application Support/sumi/build/` に出す。
+- 本体が別の書類に変わったら、前の書類の PDF はすぐ消し、新しい PDF ができるまで「Compiling …」とだけ出す。同じ本体の分割ファイルに移るときは PDF を残す。
 - 行番号の無い警告（フォントの拡大率の報告など）は「情報」に下げ、状態表示に数えない。
 
 ## 作り

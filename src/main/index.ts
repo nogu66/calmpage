@@ -4,7 +4,8 @@ import { readFile, writeFile } from 'node:fs/promises'
 import { dirname, join, sep } from 'node:path'
 import { backwardSync, build, forwardSync, resolveRoot, type BuildResult } from './build'
 import { FolderWatcher, listProjectFiles } from './files'
-import { loadSettings, saveSettings, type Palette, type Theme } from './settings'
+import { t, type Key } from '../shared/i18n'
+import { loadSettings, saveSettings, type Palette, type Settings, type Theme } from './settings'
 
 // Finder から起動するとシェルの PATH を引き継がないため、TeX と Homebrew の場所を足しておく。
 process.env.PATH = ['/Library/TeX/texbin', '/opt/homebrew/bin', '/usr/local/bin', process.env.PATH].join(':')
@@ -44,9 +45,12 @@ async function requestBuild(file: string): Promise<void> {
     const files = folder ? await listProjectFiles(folder) : []
     const root = await resolveRoot(file, currentRoot, files)
     if (!root) {
+      currentPdf = null
       send('build:finished', null, file)
       return
     }
+    // 別の書類に移ったら、前の書類の PDF を ⇧⌘O や SyncTeX の相手にしない
+    if (root !== currentRoot) currentPdf = null
     send('build:started', root)
     const result: BuildResult = await build(root)
     currentRoot = root
@@ -92,81 +96,95 @@ function groundColor(): string {
   return GROUND[loadSettings().palette][nativeTheme.shouldUseDarkColors ? 1 : 0]
 }
 
-function applyTheme(theme: Theme): void {
-  nativeTheme.themeSource = theme
-  win?.setBackgroundColor(groundColor())
-}
-
-function setTheme(theme: Theme): void {
-  applyTheme(theme)
-  saveSettings({ theme })
-  buildMenu()
-}
-
-function setPalette(palette: Palette): void {
-  saveSettings({ palette })
-  win?.setBackgroundColor(groundColor())
-  send('palette', palette)
-  buildMenu()
+// 設定の変更はここに集める。メニューと設定画面のどちらから変えても、画面へ同じ知らせが届く。
+function updateSettings(patch: Partial<Settings>): void {
+  saveSettings(patch)
+  if (patch.theme) nativeTheme.themeSource = patch.theme
+  if (patch.theme || patch.palette) win?.setBackgroundColor(groundColor())
+  if (patch.theme || patch.palette || patch.language) buildMenu()
+  send('settings:changed', loadSettings())
 }
 
 function buildMenu(): void {
+  const { theme, palette, language } = loadSettings()
+  const tr = (key: Key): string => t(language, key)
   const command = (name: string) => () => send('menu', name)
-  const { theme, palette } = loadSettings()
-  const themeItem = (label: string, value: Theme): Electron.MenuItemConstructorOptions => ({
-    label,
+  const themeItem = (value: Theme): Electron.MenuItemConstructorOptions => ({
+    label: tr(`theme.${value}`),
     type: 'radio',
     checked: theme === value,
-    click: () => setTheme(value)
+    click: () => updateSettings({ theme: value })
   })
-  const paletteItem = (label: string, value: Palette): Electron.MenuItemConstructorOptions => ({
-    label,
+  const paletteItem = (value: Palette): Electron.MenuItemConstructorOptions => ({
+    label: tr(`palette.${value}`),
     type: 'radio',
     checked: palette === value,
-    click: () => setPalette(value)
+    click: () => updateSettings({ palette: value })
   })
   Menu.setApplicationMenu(
     Menu.buildFromTemplate([
-      { role: 'appMenu' },
       {
-        label: 'ファイル',
+        label: app.name,
         submenu: [
-          { label: 'フォルダを開く…', accelerator: 'CmdOrCtrl+O', click: () => void chooseFolder() },
+          { role: 'about', label: tr('menu.about') },
           { type: 'separator' },
-          { label: '保存して組版', accelerator: 'CmdOrCtrl+S', click: command('save') },
-          { label: '組版', accelerator: 'CmdOrCtrl+R', click: command('build') },
+          { label: tr('menu.settings'), accelerator: 'CmdOrCtrl+,', click: command('settings') },
           { type: 'separator' },
-          { label: 'PDF をプレビュー.app で開く', accelerator: 'CmdOrCtrl+Shift+O', click: command('open-pdf') }
+          { role: 'services', label: tr('menu.services') },
+          { type: 'separator' },
+          { role: 'hide', label: tr('menu.hide') },
+          { role: 'hideOthers', label: tr('menu.hideOthers') },
+          { role: 'unhide', label: tr('menu.showAll') },
+          { type: 'separator' },
+          { role: 'quit', label: tr('menu.quit') }
         ]
       },
       {
-        label: '編集',
-        submenu: [{ role: 'cut' }, { role: 'copy' }, { role: 'paste' }, { role: 'selectAll' }]
-      },
-      {
-        label: '表示',
+        label: tr('menu.file'),
         submenu: [
-          { label: 'カーソル位置を PDF で表示', accelerator: 'CmdOrCtrl+J', click: command('forward-sync') },
-          { label: 'ファイル一覧', accelerator: 'CmdOrCtrl+B', click: command('toggle-sidebar') },
-          { label: '問題の一覧', accelerator: 'CmdOrCtrl+Shift+M', click: command('toggle-problems') },
+          { label: tr('menu.openFolder'), accelerator: 'CmdOrCtrl+O', click: () => void chooseFolder() },
           { type: 'separator' },
-          { label: 'PDF を拡大', accelerator: 'CmdOrCtrl+=', click: command('zoom-in') },
-          { label: 'PDF を縮小', accelerator: 'CmdOrCtrl+-', click: command('zoom-out') },
-          { label: 'PDF を幅に合わせる', accelerator: 'CmdOrCtrl+0', click: command('zoom-reset') },
+          { label: tr('menu.saveCompile'), accelerator: 'CmdOrCtrl+S', click: command('save') },
+          { label: tr('menu.compile'), accelerator: 'CmdOrCtrl+R', click: command('build') },
           { type: 'separator' },
-          {
-            label: '明るさ',
-            submenu: [themeItem('システムに合わせる', 'system'), themeItem('ライト', 'light'), themeItem('ダーク', 'dark')]
-          },
-          {
-            label: '配色',
-            submenu: [paletteItem('紙（標準）', 'paper'), paletteItem('苔', 'moss'), paletteItem('砂', 'sand')]
-          },
-          { type: 'separator' },
-          { role: 'toggleDevTools' }
+          { label: tr('menu.openPdf'), accelerator: 'CmdOrCtrl+Shift+O', click: command('open-pdf') }
         ]
       },
-      { role: 'windowMenu' }
+      {
+        label: tr('menu.edit'),
+        submenu: [
+          { role: 'cut', label: tr('menu.cut') },
+          { role: 'copy', label: tr('menu.copy') },
+          { role: 'paste', label: tr('menu.paste') },
+          { role: 'selectAll', label: tr('menu.selectAll') }
+        ]
+      },
+      {
+        label: tr('menu.view'),
+        submenu: [
+          { label: tr('menu.forwardSync'), accelerator: 'CmdOrCtrl+J', click: command('forward-sync') },
+          { label: tr('menu.sidebar'), accelerator: 'CmdOrCtrl+B', click: command('toggle-sidebar') },
+          { label: tr('menu.problems'), accelerator: 'CmdOrCtrl+Shift+M', click: command('toggle-problems') },
+          { type: 'separator' },
+          { label: tr('menu.zoomIn'), accelerator: 'CmdOrCtrl+=', click: command('zoom-in') },
+          { label: tr('menu.zoomOut'), accelerator: 'CmdOrCtrl+-', click: command('zoom-out') },
+          { label: tr('menu.zoomReset'), accelerator: 'CmdOrCtrl+0', click: command('zoom-reset') },
+          { type: 'separator' },
+          { label: tr('menu.theme'), submenu: [themeItem('system'), themeItem('light'), themeItem('dark')] },
+          { label: tr('menu.palette'), submenu: [paletteItem('paper'), paletteItem('moss'), paletteItem('sand')] },
+          { type: 'separator' },
+          { role: 'toggleDevTools', label: tr('menu.devTools') }
+        ]
+      },
+      {
+        label: tr('menu.window'),
+        submenu: [
+          { role: 'minimize', label: tr('menu.minimize') },
+          { role: 'zoom', label: tr('menu.zoom') },
+          { type: 'separator' },
+          { role: 'front', label: tr('menu.front') }
+        ]
+      }
     ])
   )
 }
@@ -210,7 +228,8 @@ function registerIpc(): void {
   ipcMain.handle('sync:backward', (_e, page: number, x: number, y: number) =>
     currentPdf ? backwardSync(currentPdf, page, x, y) : null
   )
-  ipcMain.on('settings:save', (_e, patch) => saveSettings(patch))
+  ipcMain.on('settings:save', (_e, patch: Partial<Settings>) => saveSettings(patch))
+  ipcMain.on('settings:update', (_e, patch: Partial<Settings>) => updateSettings(patch))
 }
 
 function createWindow(): void {
@@ -245,7 +264,7 @@ app.on('open-file', (event, path) => {
 })
 
 app.whenReady().then(() => {
-  applyTheme(loadSettings().theme)
+  nativeTheme.themeSource = loadSettings().theme
   registerIpc()
   buildMenu()
   createWindow()
