@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <!-- Sumi のアイコン「二粒」。滴は円と、円に接する 2 本の直線で作図している -->
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fdfdfc"/><stop offset="1" stop-color="#efefeb"/></linearGradient>
+    <linearGradient id="ink" x1="0" y1="0" x2="0.35" y2="1"><stop offset="0" stop-color="#4a4a4a"/><stop offset="1" stop-color="#0c0c0c"/></linearGradient>
+  </defs>
+  <rect x="100" y="100" width="824" height="824" rx="185" fill="url(#bg)"/>
+  <rect x="100.5" y="100.5" width="823" height="823" rx="184.5" fill="none" stroke="#000" stroke-opacity="0.06"/>
+  <circle cx="512" cy="250.1" r="38.3" fill="url(#ink)"/>
+  <path d="M512 319 L638.2 528.7 A147.2 147.2 0 1 1 385.8 528.7 Z" fill="url(#ink)"/>
+  <path class="shine" d="M415.2 639.9 A103.1 103.1 0 0 1 427.6 545.5" fill="none" stroke="#fff" stroke-opacity="0.28" stroke-width="19.1" stroke-linecap="round"/>
+</svg>
