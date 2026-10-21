@@ -2,7 +2,15 @@
   "name": "sumi",
   "productName": "Sumi",
   "version": "0.1.0",
-  "description": "LaTeX の編集とプレビューを 1 つの画面で行う Mac アプリ",
+  "description": "Sumi TeX: a quiet LaTeX editor for macOS with a live PDF preview and an optional AI panel",
+  "license": "MIT",
+  "author": "nogu66",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/nogu66/sumitex.git"
+  },
+  "homepage": "https://github.com/nogu66/sumitex",
+  "bugs": "https://github.com/nogu66/sumitex/issues",
   "main": "out/main/index.js",
   "private": true,
   "scripts": {
@@ -10,7 +18,8 @@
     "build": "electron-vite build",
     "start": "electron-vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "dist": "electron-vite build && electron-builder --mac --dir"
+    "dist": "electron-vite build && electron-builder --mac --dir",
+    "screenshots": "electron-vite build && node scripts/screenshots.mjs"
   },
   "build": {
     "appId": "me.noguchy.sumi",

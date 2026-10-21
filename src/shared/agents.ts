@@ -12,11 +12,16 @@ export interface AgentConfig {
   env?: Record<string, string>
 }
 
-// 最初から入れるのは 2 つだけ。ほかは必要になったら設定の登録簿から足す。
+// 起動するときに、利用者のログインシェル（$SHELL）に置き換える
+export const LOGIN_SHELL = '$SHELL'
+
+// 最初から入れるのは Claude Code と Codex、それに素の端末だけ。ほかは必要になったら設定の登録簿から足す。
+// 端末では claude などの CLI をそのまま動かせるので、ACP では使えないスラッシュコマンドもそこで使える。
 // 版は ACP の登録簿（cdn.agentclientprotocol.com/registry）に載っているものに合わせる。
 export const DEFAULT_AGENTS: AgentConfig[] = [
   { id: 'claude', name: 'Claude Code', kind: 'acp', command: 'npx', args: ['-y', '@agentclientprotocol/claude-agent-acp@0.94.0'] },
-  { id: 'codex', name: 'Codex', kind: 'acp', command: 'npx', args: ['-y', '@agentclientprotocol/codex-acp@2.2.2'] }
+  { id: 'codex', name: 'Codex', kind: 'acp', command: 'npx', args: ['-y', '@agentclientprotocol/codex-acp@2.2.2'] },
+  { id: 'terminal', name: 'Terminal', kind: 'terminal', command: LOGIN_SHELL, args: ['-l'] }
 ]
 
 // 登録簿の 1 件。installed が false なら、この Mac に入っていない（専用のアプリを別に入れる必要がある）。

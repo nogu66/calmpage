@@ -1,7 +1,7 @@
 import type { BuildResult, Diagnostic } from '../main/build'
 import type { ContentBlock } from '@agentclientprotocol/sdk'
 import type { AgentConfig, AgentKind, Settings } from '../main/settings'
-import { DEFAULT_AGENTS, type RegistryAgent } from '../shared/agents'
+import { DEFAULT_AGENTS, LOGIN_SHELL, type RegistryAgent } from '../shared/agents'
 import type { SumiApi } from '../preload'
 import { t, type Key } from '../shared/i18n'
 import { Editor } from './editor'
@@ -358,7 +358,8 @@ function renderAgents(): void {
     const item = element('button', 'agent-item', a.name)
     item.setAttribute('role', 'menuitemradio')
     item.setAttribute('aria-checked', String(a.id === agent?.id))
-    if (a.kind === 'terminal') item.append(element('span', 'agent-kind', kindLabel(a)))
+    // 素の端末は名前だけで分かるので、種類の印を付けない
+    if (a.kind === 'terminal' && a.command !== LOGIN_SHELL) item.append(element('span', 'agent-kind', kindLabel(a)))
     item.addEventListener('click', () => selectAgent(a.id))
     menu.append(item)
   }

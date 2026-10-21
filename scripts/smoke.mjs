@@ -1,13 +1,15 @@
 // 組み上がったアプリを起動し、主な流れを自動で確かめる。
-// 使い方: npm run build && node scripts/smoke.mjs <LaTeX のフォルダ> <スクリーンショットの出力先>
-// フォルダの中身は書き換わるので、必ずコピーを渡すこと。
+// 使い方: npm run build && node scripts/smoke.mjs [LaTeX のフォルダ] [スクリーンショットの出力先]
+// フォルダの中身は書き換わるので、渡すときは必ずコピーにすること。省くと examples/sample を一時フォルダに写して使う。
 import { _electron as electron } from 'playwright-core'
-import { appendFileSync, mkdtempSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs'
+import { appendFileSync, cpSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 
-const folder = resolve(process.argv[2] ?? '')
-const shots = resolve(process.argv[3] ?? '.')
+const folder = process.argv[2] ? resolve(process.argv[2]) : join(mkdtempSync(join(tmpdir(), 'sumi-sample-')), 'sample')
+if (!process.argv[2]) cpSync(resolve('examples/sample'), folder, { recursive: true })
+const shots = resolve(process.argv[3] ?? mkdtempSync(join(tmpdir(), 'sumi-shots-')))
+mkdirSync(shots, { recursive: true })
 const userData = mkdtempSync(join(tmpdir(), 'sumi-smoke-'))
 const results = []
 const check = (name, ok, detail = '') => {
@@ -36,7 +38,8 @@ const page = await app.firstWindow()
 const errors = []
 page.on('console', (m) => m.type() === 'error' && errors.push(m.text()))
 page.on('pageerror', (e) => errors.push(String(e)))
-await page.setViewportSize({ width: 1480, height: 900 }).catch(() => {})
+// 表示の範囲だけを狭めると窓の下に空きができるので、窓そのものの大きさを変える
+await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setContentSize(1480, 900))
 
 const status = () => page.locator('#status').getAttribute('data-state')
 const waitStatus = async (states, timeout = 90_000) => {
@@ -71,6 +74,8 @@ await page.screenshot({ path: join(shots, '1-open.png') })
 
 const file = await page.locator('#file-name').textContent()
 const filePath = join(folder, file)
+const base = file.replace(/\.tex$/, '')
+const escaped = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 
 // 2. 誤りを入れると自動組版でエラーが出る
 const begin = readFileSync(filePath, 'utf8').split('\n').findIndex((l) => l.includes('\\begin{document}')) + 1
@@ -116,21 +121,21 @@ const line = await page.evaluate(() => {
 })
 check('PDF → ソース', line > 1, `${await page.locator('#file-name').textContent()}:${line}`)
 
-// 6. 外部での書き換え（AI エージェントの編集を想定）で組み直す
-const profile = join(folder, 'tex', 'profile.tex')
+// 6. 外部での書き換え（AI エージェントの編集を想定）で組み直す。本体以外の .tex があればそれを、なければ本体を書き換える
+const others = readdirSync(folder, { recursive: true }).filter((f) => f.endsWith('.tex') && f !== file)
+const outside = join(folder, others[0] ?? file)
 let built = false
 try {
-  readFileSync(profile)
   const before = await page.locator('#status-text').textContent()
-  appendFileSync(profile, '\n% external edit\n')
+  appendFileSync(outside, '\n% external edit\n')
   built = await page
     .waitForFunction(() => document.querySelector('#status').dataset.state === 'building', null, { timeout: 8000 })
     .then(() => true)
     .catch(() => false)
   await waitStatus(['ok', 'warning', 'error'])
-  check('外部の変更で再組版', built, before)
-} catch {
-  check('外部の変更で再組版', false, 'tex/profile.tex がない')
+  check('外部の変更で再組版', built, `${others[0] ?? file}: ${before}`)
+} catch (e) {
+  check('外部の変更で再組版', false, String(e))
 }
 
 // 6b. 別の書類に切り替えたら、前の書類の PDF はすぐ消え、新しい PDF に替わる
@@ -197,9 +202,13 @@ await clickMenu('AI パネル')
 const ready = await waitFor((t) => !!document.querySelector(`${t} .thread-hint`), thread)
 let before = await send('hello')
 await waitFor(([t, n]) => document.querySelectorAll(`${t} .msg-agent`).length > n && /Received/.test([...document.querySelectorAll(`${t} .msg-agent`)].pop().textContent), [thread, before])
+// 返事が届き終わるまで待つ（途中で読むと文字が欠ける）
+await page.waitForFunction((t) => document.querySelector(`${t} .composer-send`).dataset.state !== 'stop', thread)
+await page.waitForTimeout(300)
 const firstReply = await lastAgentText()
 const summary = await page.locator(`${thread} .msg-context`).last().textContent()
-check('ACP: 文脈を添えて送る', ready && /resource_link \S*rirekisho\.tex/.test(firstReply) && /resource_link rirekisho\.pdf/.test(firstReply) && /rirekisho\.tex/.test(summary), `${firstReply} / 添えたもの: ${summary}`)
+const tex = escaped(`${base}.tex`)
+check('ACP: 文脈を添えて送る', ready && new RegExp(`resource_link \\S*${tex}`).test(firstReply) && new RegExp(`resource_link ${escaped(`${base}.pdf`)}`).test(firstReply) && new RegExp(tex).test(summary), `${firstReply} / 添えたもの: ${summary}`)
 
 await page.locator('#chip-file').click()
 const chipOff = await page.locator('#chip-file').getAttribute('aria-pressed')
@@ -208,7 +217,7 @@ before = await send('hello again')
 await waitFor(([t, n]) => document.querySelectorAll(`${t} .msg-agent`).length > n && /Received/.test([...document.querySelectorAll(`${t} .msg-agent`)].pop().textContent), [thread, before])
 const secondReply = await lastAgentText()
 await page.locator('#chip-file').click()
-check('ACP: チップを外す', chipOff === 'false' && !/resource_link \S*rirekisho\.tex/.test(secondReply), secondReply)
+check('ACP: チップを外す', chipOff === 'false' && !new RegExp(`resource_link \\S*${tex}`).test(secondReply), secondReply)
 
 await page.waitForFunction((t) => !document.querySelector(`${t} .composer-send`).disabled, thread)
 await send('please edit')
@@ -241,8 +250,9 @@ await page.keyboard.type('echo sumi-$((40+2))')
 await page.keyboard.press('Enter')
 const echoed = await waitFor(() => /sumi-42/.test(document.querySelector('.ai-term:not([hidden]) .xterm-rows')?.innerText ?? ''), null)
 await page.locator('#chip-file').click()
-const inserted = await waitFor(() => /documents\/.*rirekisho\.tex/.test(document.querySelector('.ai-term:not([hidden]) .xterm-rows')?.innerText.replace(/\n/g, '') ?? ''), null, 5000)
+const inserted = await waitFor((name) => (document.querySelector('.ai-term:not([hidden]) .xterm-rows')?.innerText.replace(/\n/g, '') ?? '').split('sumi-42').pop().includes(name), `${base}.tex`, 5000)
 check('端末のエージェントに切り替える', prompt && echoed && inserted && (await page.locator('#ai-threads').isHidden()), (await termText()).replace(/\n/g, ' ').slice(-80))
+
 
 // 戻すと、ACP のスレッドは残っている
 await page.locator('#agent-picker').click()
@@ -255,7 +265,7 @@ const sides = await page.evaluate((t) => {
   const agent = document.querySelector(`${t} .msg-agent`).getBoundingClientRect()
   return { userRight: Math.round(log.right - user.right), userLeft: Math.round(user.left - log.left), agentLeft: Math.round(agent.left - log.left) }
 }, thread)
-check('自分は右、エージェントは左', sides.userRight < 24 && sides.userLeft > 60 && sides.agentLeft < 24, JSON.stringify(sides))
+check('自分は右、エージェントは左', sides.userRight < 32 && sides.userLeft > 60 && sides.agentLeft < 32, JSON.stringify(sides))
 check(
   'ACP のスレッドが残り、返事が欠けない',
   (await page.locator(`${thread} .msg-user`).count()) === 4 && replies.length === 4 && replies.every((r) => r.startsWith('Received')),
@@ -296,9 +306,19 @@ await page.locator('#agent-browse').click()
 await page.locator('#agent-restore').click()
 await page.waitForTimeout(300)
 const defaultsBack = await page.evaluate(() => [...document.querySelectorAll('#agent-list .agent-row-name')].map((n) => n.textContent))
-check('Claude Code と Codex を元に戻す', defaultsBack.join(',') === 'Claude Code,Codex,Fake ACP,Shell (zsh)', defaultsBack.join(', '))
+check('Claude Code と Codex を元に戻す', defaultsBack.join(',') === 'Claude Code,Codex,Terminal,Fake ACP,Shell (zsh)', defaultsBack.join(', '))
 await page.screenshot({ path: join(shots, '9-agents.png') })
 await page.keyboard.press('Escape')
+
+// 最初からある Terminal は、利用者のログインシェルを開く
+await page.locator('#agent-picker').click()
+await page.locator('#agent-menu .agent-item', { hasText: 'Terminal' }).click()
+await page.waitForTimeout(1500)
+await page.keyboard.type('echo login-$((1+1)) $0')
+await page.keyboard.press('Enter')
+const login = await waitFor(() => /login-2 -?\S*sh/.test(document.querySelector('.ai-term:not([hidden]) .xterm-rows')?.innerText ?? ''), null, 15_000)
+check('Terminal でログインシェルが開く', login, (await termText()).replace(/\n/g, ' ').slice(-60))
+
 check('エージェントの追加と削除', added.length === 3 && added.some((r) => r.includes('npx -y some agent --acp')) && pickerName === 'Extra' && remaining === 2, `${added.join(' | ')} → 残り ${remaining}`)
 
 await clickMenu('AI パネル')

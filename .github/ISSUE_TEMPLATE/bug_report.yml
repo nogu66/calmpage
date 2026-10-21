@@ -1,0 +1,49 @@
+name: Bug report
+description: Something doesn't work as expected
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What did you expect, and what happened instead?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: If you can, attach a small `.tex` project that shows the problem.
+      placeholder: |
+        1. Open a folder with …
+        2. Type …
+        3. See …
+    validations:
+      required: true
+  - type: input
+    id: macos
+    attributes:
+      label: macOS version and Mac
+      placeholder: macOS 26.0, Apple silicon
+    validations:
+      required: true
+  - type: input
+    id: sumi
+    attributes:
+      label: Sumi version or commit
+      placeholder: 0.1.0 or a commit hash
+  - type: input
+    id: tex
+    attributes:
+      label: TeX distribution and engine
+      placeholder: MacTeX 2026, LuaLaTeX
+  - type: input
+    id: agent
+    attributes:
+      label: AI agent (if the problem is in the AI panel)
+      placeholder: Claude Code, Codex, or the command you added
+  - type: textarea
+    id: logs
+    attributes:
+      label: Screenshots or logs
+      description: A screenshot, the Problems list, or output from View → Developer Tools → Console.

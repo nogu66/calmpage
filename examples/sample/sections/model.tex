@@ -1,0 +1,33 @@
+\section{A simple model}
+
+Treat the sheet as a thin, uniform medium and let $c(r,t)$
+be the concentration of pigment at distance $r$ from where
+the drop landed. Within the wet region the pigment obeys
+the diffusion equation
+\begin{equation}
+  \frac{\partial c}{\partial t} = D\,\nabla^2 c,
+  \label{eq:diffusion}
+\end{equation}
+where $D$ is the diffusion coefficient of the pigment in
+the paper. For a drop that deposits a mass $M$ at a single
+point, the solution of~\eqref{eq:diffusion} in two
+dimensions is
+\begin{equation}
+  c(r,t) = \frac{M}{4\pi D t}\,
+           \exp\!\left(-\frac{r^2}{4 D t}\right).
+  \label{eq:solution}
+\end{equation}
+The profile keeps its shape and only widens: its width is
+set by the length $\ell(t) = \sqrt{4 D t}$.
+
+The water front moves in the same way. For capillary flow
+through channels of radius $a$, the Washburn equation
+gives the distance reached after time $t$ as
+\begin{equation}
+  L(t) = \sqrt{\frac{\gamma\, a\, t \cos\theta}{2\eta}},
+  \label{eq:washburn}
+\end{equation}
+with surface tension $\gamma$, contact angle $\theta$, and
+viscosity $\eta$. Both lengths grow as $\sqrt{t}$, which
+is why a stain spreads quickly at first and then seems to
+stop.

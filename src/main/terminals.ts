@@ -1,4 +1,5 @@
 import { spawn, type IDisposable, type IPty } from 'node-pty'
+import { LOGIN_SHELL } from '../shared/agents'
 import { t } from '../shared/i18n'
 import { agentEnv, which } from './shell-env'
 import { loadSettings, type AgentConfig } from './settings'
@@ -24,8 +25,9 @@ export class Terminals {
     env.COLORTERM = 'truecolor'
     env.TERM_PROGRAM = 'Sumi'
     delete env.TERM_PROGRAM_VERSION
-    const file = which(agent.command, env.PATH)
-    if (!file) return t(loadSettings().language, 'ai.notFound', { command: agent.command })
+    const command = agent.command === LOGIN_SHELL ? env.SHELL || '/bin/zsh' : agent.command
+    const file = which(command, env.PATH)
+    if (!file) return t(loadSettings().language, 'ai.notFound', { command })
     let pty: IPty
     try {
       pty = spawn(file, agent.args, { name: 'xterm-256color', cols, rows, cwd, env: { ...env, ...agent.env } })

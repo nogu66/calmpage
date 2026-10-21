@@ -1,0 +1,19 @@
+# Changelog
+
+All notable changes to Sumi TeX are listed here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
+
+## Unreleased
+
+## 0.1.0 - 2026-10-21
+
+### Added
+
+- Editor and live PDF preview in one window, compiled with your own `latexmk`
+- Auto compile, error reporting in the editor and a Problems list
+- SyncTeX in both directions
+- Root document detection with `% !TEX root`, `.latexmkrc`, and automatic engine selection
+- Reload and recompile on external file changes
+- Light, dark, and system appearance with Paper, Moss, and Sand palettes
+- English and Japanese interface
+- Optional AI panel: ACP agents in a thread view (Claude Code and Codex built in), a built-in Terminal with your login shell, terminal agents, the ACP registry, and context chips
+- Settings to manage agents or turn the AI panel off

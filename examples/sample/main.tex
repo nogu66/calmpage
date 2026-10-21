@@ -1,0 +1,38 @@
+% An example document for Sumi TeX.
+% Open this folder in Sumi TeX. main.tex is the root;
+% the files in sections/ are read with \input.
+\documentclass[11pt]{article}
+
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage[margin=1.1in]{geometry}
+\usepackage{amsmath}
+\usepackage{booktabs}
+\usepackage{siunitx}
+\usepackage{microtype}
+\usepackage{pgfplots}
+\pgfplotsset{compat=1.18}
+\usepackage[hidelinks]{hyperref}
+
+\title{How Ink Spreads in Washi Paper}
+\author{nogu}
+\date{}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+  A drop of sumi ink on washi paper does not stay where it
+  lands. It is pulled into the fibres by capillary action
+  and then keeps spreading by diffusion, leaving the soft
+  edge that calligraphers call \emph{nijimi}. This note
+  sketches a simple model of that spreading and shows why
+  the stain grows with the square root of time.
+\end{abstract}
+
+\input{sections/introduction}
+\input{sections/model}
+\input{sections/results}
+
+\end{document}
