@@ -2,10 +2,14 @@ import { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, shell } from 'e
 import { statSync } from 'node:fs'
 import { readFile, writeFile } from 'node:fs/promises'
 import { dirname, join, sep } from 'node:path'
+import { AcpAgents } from './acp'
 import { backwardSync, build, forwardSync, resolveRoot, type BuildResult } from './build'
 import { FolderWatcher, listProjectFiles } from './files'
+import { loadRegistry } from './registry'
+import { warmUpShellEnv } from './shell-env'
+import { Terminals } from './terminals'
 import { t, type Key } from '../shared/i18n'
-import { loadSettings, saveSettings, type Palette, type Settings, type Theme } from './settings'
+import { loadSettings, saveSettings, type AgentConfig, type Palette, type Settings, type Theme } from './settings'
 
 // Finder から起動するとシェルの PATH を引き継がないため、TeX と Homebrew の場所を足しておく。
 process.env.PATH = ['/Library/TeX/texbin', '/opt/homebrew/bin', '/usr/local/bin', process.env.PATH].join(':')
@@ -20,12 +24,24 @@ let currentPdf: string | null = null
 let pendingOpen: string | null = process.env.SUMI_OPEN ?? null
 
 const watcher = new FolderWatcher((path, content) => win?.webContents.send('file:changed', path, content))
+const terminals = new Terminals(send)
+const acpAgents = new AcpAgents(send)
+
+function agentConfig(id: string): AgentConfig | undefined {
+  return loadSettings().agents.find((a) => a.id === id)
+}
+
+function stopAgents(): void {
+  terminals.stopAll()
+  acpAgents.stopAll()
+}
 
 function send(channel: string, ...args: unknown[]): void {
   win?.webContents.send(channel, ...args)
 }
 
 function setFolder(next: string): void {
+  if (next !== folder) stopAgents() // AI は開いているフォルダで動くので、替えたら止める
   folder = next
   watcher.watch(next)
   saveSettings({ folder: next })
@@ -98,15 +114,25 @@ function groundColor(): string {
 
 // 設定の変更はここに集める。メニューと設定画面のどちらから変えても、画面へ同じ知らせが届く。
 function updateSettings(patch: Partial<Settings>): void {
+  // 消した・書き換えたエージェントは止める（次に開いたとき新しい設定で起動する）
+  if (patch.agents) {
+    for (const old of loadSettings().agents) {
+      const next = patch.agents.find((a) => a.id === old.id)
+      if (JSON.stringify(next) === JSON.stringify(old)) continue
+      terminals.stop(old.id)
+      acpAgents.stop(old.id)
+    }
+  }
   saveSettings(patch)
+  if (patch.aiEnabled === false) stopAgents()
   if (patch.theme) nativeTheme.themeSource = patch.theme
   if (patch.theme || patch.palette) win?.setBackgroundColor(groundColor())
-  if (patch.theme || patch.palette || patch.language) buildMenu()
+  if (patch.theme || patch.palette || patch.language || patch.aiEnabled !== undefined) buildMenu()
   send('settings:changed', loadSettings())
 }
 
 function buildMenu(): void {
-  const { theme, palette, language } = loadSettings()
+  const { theme, palette, language, aiEnabled } = loadSettings()
   const tr = (key: Key): string => t(language, key)
   const command = (name: string) => () => send('menu', name)
   const themeItem = (value: Theme): Electron.MenuItemConstructorOptions => ({
@@ -165,6 +191,7 @@ function buildMenu(): void {
           { label: tr('menu.forwardSync'), accelerator: 'CmdOrCtrl+J', click: command('forward-sync') },
           { label: tr('menu.sidebar'), accelerator: 'CmdOrCtrl+B', click: command('toggle-sidebar') },
           { label: tr('menu.problems'), accelerator: 'CmdOrCtrl+Shift+M', click: command('toggle-problems') },
+          { label: tr('menu.ai'), accelerator: 'CmdOrCtrl+Shift+L', click: command('toggle-ai'), visible: aiEnabled, enabled: aiEnabled },
           { type: 'separator' },
           { label: tr('menu.zoomIn'), accelerator: 'CmdOrCtrl+=', click: command('zoom-in') },
           { label: tr('menu.zoomOut'), accelerator: 'CmdOrCtrl+-', click: command('zoom-out') },
@@ -230,6 +257,31 @@ function registerIpc(): void {
   )
   ipcMain.on('settings:save', (_e, patch: Partial<Settings>) => saveSettings(patch))
   ipcMain.on('settings:update', (_e, patch: Partial<Settings>) => updateSettings(patch))
+  ipcMain.handle('term:start', (_e, id: string, cols: number, rows: number) => {
+    const agent = agentConfig(id)
+    return folder && agent ? terminals.start(agent, folder, cols, rows) : null
+  })
+  ipcMain.on('term:input', (_e, id: string, data: string) => terminals.write(id, data))
+  ipcMain.on('term:resize', (_e, id: string, cols: number, rows: number) => terminals.resize(id, cols, rows))
+  ipcMain.handle('acp:start', (_e, id: string) => {
+    const agent = agentConfig(id)
+    return folder && agent ? acpAgents.start(agent, folder) : { ok: false, error: 'no folder' }
+  })
+  ipcMain.handle('acp:new-session', (_e, id: string) => acpAgents.newSession(id))
+  ipcMain.handle('acp:authenticate', (_e, id: string, methodId: string) => acpAgents.authenticate(id, methodId))
+  ipcMain.handle('acp:prompt', (_e, id: string, prompt: unknown[]) => acpAgents.prompt(id, prompt as never))
+  ipcMain.on('acp:cancel', (_e, id: string) => acpAgents.cancel(id))
+  ipcMain.on('acp:answer', (_e, key: string, optionId: string | null) => acpAgents.answerPermission(key, optionId))
+  ipcMain.handle('registry:list', async () => {
+    try {
+      return { agents: await loadRegistry() }
+    } catch (err) {
+      return { error: String(err) }
+    }
+  })
+  ipcMain.on('link:open', (_e, url: string) => {
+    if (/^https?:\/\//.test(url)) void shell.openExternal(url)
+  })
 }
 
 function createWindow(): void {
@@ -264,8 +316,11 @@ app.on('open-file', (event, path) => {
 })
 
 app.whenReady().then(() => {
+  // 組み立てたアプリは .icns を使う。開発中だけ Dock の Electron のアイコンを差し替える
+  if (!app.isPackaged) app.dock?.setIcon(join(__dirname, '../../build/icon.png'))
   nativeTheme.themeSource = loadSettings().theme
   registerIpc()
+  warmUpShellEnv()
   buildMenu()
   createWindow()
   app.on('activate', () => {
@@ -275,5 +330,6 @@ app.whenReady().then(() => {
 
 app.on('window-all-closed', () => {
   watcher.close()
+  stopAgents()
   app.quit()
 })

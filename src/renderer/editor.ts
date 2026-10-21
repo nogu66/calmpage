@@ -54,7 +54,11 @@ export class Editor {
   private docs = new Map<string, Doc>()
   path: string | null = null
 
-  constructor(parent: HTMLElement, private onEdit: () => void) {
+  constructor(
+    parent: HTMLElement,
+    private onEdit: () => void,
+    private onSelect: () => void = () => {}
+  ) {
     this.view = new EditorView({ parent, state: this.createState('') })
   }
 
@@ -70,6 +74,7 @@ export class Editor {
       // 外部変更の読み直し（userEvent なし）では呼ばない。
       EditorView.updateListener.of((u) => {
         if (u.transactions.some((tr) => tr.docChanged && tr.annotation(Transaction.userEvent) !== undefined)) this.onEdit()
+        if (u.selectionSet) this.onSelect()
       })
     ]
   }
@@ -130,6 +135,21 @@ export class Editor {
     }
     doc.saved = text
     return true
+  }
+
+  // 選択している行の範囲。行頭で終わる選択はその行を含めない。
+  selectionLines(): { from: number; to: number } | null {
+    const { from, to, empty } = this.view.state.selection.main
+    if (empty) return null
+    const doc = this.view.state.doc
+    const last = doc.lineAt(to)
+    const end = last.from === to && to > from ? last.number - 1 : last.number
+    return { from: doc.lineAt(from).number, to: end }
+  }
+
+  selectionText(): string {
+    const { from, to } = this.view.state.selection.main
+    return this.view.state.sliceDoc(from, to)
   }
 
   cursor(): { line: number; column: number } {

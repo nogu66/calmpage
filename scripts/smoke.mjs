@@ -15,8 +15,21 @@ const check = (name, ok, detail = '') => {
   console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${detail ? `  (${detail})` : ''}`)
 }
 
+// 右の柱のエージェント: 本物の代わりに、テスト用の ACP エージェントと zsh を登録しておく
+writeFileSync(
+  join(userData, 'settings.json'),
+  JSON.stringify({
+    agents: [
+      { id: 'fake', name: 'Fake ACP', kind: 'acp', command: process.execPath, args: [resolve('scripts/fake-acp-agent.mjs')] },
+      { id: 'shell', name: 'Shell', kind: 'terminal', command: '/bin/zsh', args: ['-f'] }
+    ],
+    agent: 'fake'
+  })
+)
+
 const app = await electron.launch({
   args: ['.'],
+  // AI の柱では本物の claude / codex の代わりに zsh を動かす（端末の仕組みだけを確かめる）
   env: { ...process.env, SUMI_OPEN: folder, SUMI_USER_DATA: userData }
 })
 const page = await app.firstWindow()
@@ -164,6 +177,161 @@ check('配色の切り替え', (await page.evaluate(() => document.documentEleme
 await page.screenshot({ path: join(shots, '5-settings.png') })
 await page.keyboard.press('Escape')
 check('Esc で閉じる', !(await page.locator('#settings').isVisible()))
+
+// 8. 右の柱: ACP のエージェント（偽物）と端末のエージェント（zsh）
+const thread = '.thread:not([hidden])'
+const waitFor = (fn, arg, timeout = 15_000) =>
+  page
+    .waitForFunction(fn, arg, { timeout })
+    .then(() => true)
+    .catch(() => false)
+const lastAgentText = () => page.evaluate((t) => [...document.querySelectorAll(`${t} .msg-agent`)].pop()?.textContent ?? '', thread)
+const send = async (text) => {
+  const before = await page.locator(`${thread} .msg-agent`).count()
+  await page.locator(`${thread} .composer-input`).fill(text)
+  await page.locator(`${thread} .composer-input`).press('Enter')
+  return before
+}
+
+await clickMenu('AI パネル')
+const ready = await waitFor((t) => !!document.querySelector(`${t} .thread-hint`), thread)
+let before = await send('hello')
+await waitFor(([t, n]) => document.querySelectorAll(`${t} .msg-agent`).length > n && /Received/.test([...document.querySelectorAll(`${t} .msg-agent`)].pop().textContent), [thread, before])
+const firstReply = await lastAgentText()
+const summary = await page.locator(`${thread} .msg-context`).last().textContent()
+check('ACP: 文脈を添えて送る', ready && /resource_link \S*rirekisho\.tex/.test(firstReply) && /resource_link rirekisho\.pdf/.test(firstReply) && /rirekisho\.tex/.test(summary), `${firstReply} / 添えたもの: ${summary}`)
+
+await page.locator('#chip-file').click()
+const chipOff = await page.locator('#chip-file').getAttribute('aria-pressed')
+await page.waitForFunction((t) => !document.querySelector(`${t} .composer-send`).disabled, thread)
+before = await send('hello again')
+await waitFor(([t, n]) => document.querySelectorAll(`${t} .msg-agent`).length > n && /Received/.test([...document.querySelectorAll(`${t} .msg-agent`)].pop().textContent), [thread, before])
+const secondReply = await lastAgentText()
+await page.locator('#chip-file').click()
+check('ACP: チップを外す', chipOff === 'false' && !/resource_link \S*rirekisho\.tex/.test(secondReply), secondReply)
+
+await page.waitForFunction((t) => !document.querySelector(`${t} .composer-send`).disabled, thread)
+await send('please edit')
+const asked = await waitFor((t) => !!document.querySelector(`${t} .permission-button.allow`), thread)
+const diffRows = await page.locator(`${thread} .diff-row`).allTextContents()
+await page.screenshot({ path: join(shots, '6-ai.png') })
+await page.locator(`${thread} .permission-button.allow`).click()
+const edited = await waitFor((t) => document.querySelector(`${t} .tool`)?.dataset.status === 'completed', thread)
+const note = join(folder, 'smoke-note.tex')
+let written = ''
+try {
+  written = readFileSync(note, 'utf8')
+  unlinkSync(note)
+} catch {}
+check('ACP: 差分を見て許可し、書き換える', asked && edited && written.startsWith('new line') && diffRows.some((r) => r === 'new line'), `差分 ${JSON.stringify(diffRows)} / 書いた内容 ${JSON.stringify(written)}`)
+
+await page.waitForFunction((t) => !document.querySelector(`${t} .composer-send`).disabled, thread)
+await send('slow')
+await waitFor((t) => document.querySelector(`${t} .composer-send`).dataset.state === 'stop', thread)
+await page.locator(`${thread} .composer-send`).click()
+const stopped = await waitFor((t) => [...document.querySelectorAll(`${t} .note-title`)].some((n) => n.textContent === '中断しました'), thread, 8000)
+check('ACP: 中断', stopped)
+
+// 端末のエージェントへ切り替える
+await page.locator('#agent-picker').click()
+await page.locator('#agent-menu .agent-item', { hasText: 'Shell' }).click()
+const termText = () => page.evaluate(() => document.querySelector('.ai-term:not([hidden]) .xterm-rows')?.innerText ?? '')
+const prompt = await waitFor(() => /%/.test(document.querySelector('.ai-term:not([hidden]) .xterm-rows')?.innerText ?? ''), null)
+await page.keyboard.type('echo sumi-$((40+2))')
+await page.keyboard.press('Enter')
+const echoed = await waitFor(() => /sumi-42/.test(document.querySelector('.ai-term:not([hidden]) .xterm-rows')?.innerText ?? ''), null)
+await page.locator('#chip-file').click()
+const inserted = await waitFor(() => /documents\/.*rirekisho\.tex/.test(document.querySelector('.ai-term:not([hidden]) .xterm-rows')?.innerText.replace(/\n/g, '') ?? ''), null, 5000)
+check('端末のエージェントに切り替える', prompt && echoed && inserted && (await page.locator('#ai-threads').isHidden()), (await termText()).replace(/\n/g, ' ').slice(-80))
+
+// 戻すと、ACP のスレッドは残っている
+await page.locator('#agent-picker').click()
+await page.locator('#agent-menu .agent-item', { hasText: 'Fake ACP' }).click()
+const replies = await page.locator(`${thread} .msg-agent`).allTextContents()
+// 自分の発言は右寄せ、エージェントの返事は左から
+const sides = await page.evaluate((t) => {
+  const log = document.querySelector(`${t} .thread-log`).getBoundingClientRect()
+  const user = document.querySelector(`${t} .msg-user`).getBoundingClientRect()
+  const agent = document.querySelector(`${t} .msg-agent`).getBoundingClientRect()
+  return { userRight: Math.round(log.right - user.right), userLeft: Math.round(user.left - log.left), agentLeft: Math.round(agent.left - log.left) }
+}, thread)
+check('自分は右、エージェントは左', sides.userRight < 24 && sides.userLeft > 60 && sides.agentLeft < 24, JSON.stringify(sides))
+check(
+  'ACP のスレッドが残り、返事が欠けない',
+  (await page.locator(`${thread} .msg-user`).count()) === 4 && replies.length === 4 && replies.every((r) => r.startsWith('Received')),
+  replies.map((r) => r.slice(0, 24)).join(' / ')
+)
+
+// 設定からエージェントを追加・削除する
+await page.locator('#open-settings').click()
+await page.locator('#agent-form-name').fill('Extra')
+await page.locator('#agent-form-command').fill('npx -y "some agent" --acp')
+await page.locator('#agent-form button[type="submit"]').click()
+await page.waitForTimeout(300)
+const added = await page.evaluate(() => [...document.querySelectorAll('#agent-list .agent-row')].map((r) => r.textContent))
+const pickerName = await page.locator('#agent-name').textContent()
+await page.locator('#agent-list .agent-row', { hasText: 'Extra' }).locator('.agent-remove').click()
+await page.waitForTimeout(300)
+const remaining = await page.locator('#agent-list .agent-row').count()
+
+// 編集: 行を押すと欄に入り、保存で書き換わる
+await page.locator('#agent-list .agent-row', { hasText: 'Shell' }).locator('.agent-row-main').click()
+const editingCommand = await page.locator('#agent-form-command').inputValue()
+await page.locator('#agent-form-name').fill('Shell (zsh)')
+await page.locator('#agent-form-submit').click()
+await page.waitForTimeout(300)
+const renamed = await page.locator('#agent-list .agent-row', { hasText: 'Shell (zsh)' }).count()
+check('エージェントの編集', editingCommand === '/bin/zsh -f' && renamed === 1 && (await page.locator('#agent-list .agent-row').count()) === 2, editingCommand)
+
+// 登録簿から探す（ネットから一覧を読む）
+await page.locator('#agent-browse').click()
+const listed = await waitFor(() => document.querySelectorAll('#registry-list .registry-row').length > 10, null, 20_000)
+const total = await page.locator('#registry-list .registry-row').count()
+await page.locator('#registry-search').fill('gemini')
+const filtered = await page.locator('#registry-list .registry-row').allTextContents()
+check('ACP の登録簿から探す', listed && filtered.length >= 1 && filtered.every((r) => /gemini/i.test(r)), `${total} 件 → 「gemini」で ${filtered.length} 件`)
+await page.locator('#agent-browse').click()
+
+// 元に戻す: 最初の 3 つが戻り、自分で足したものは残る
+await page.locator('#agent-restore').click()
+await page.waitForTimeout(300)
+const defaultsBack = await page.evaluate(() => [...document.querySelectorAll('#agent-list .agent-row-name')].map((n) => n.textContent))
+check('Claude Code と Codex を元に戻す', defaultsBack.join(',') === 'Claude Code,Codex,Fake ACP,Shell (zsh)', defaultsBack.join(', '))
+await page.screenshot({ path: join(shots, '9-agents.png') })
+await page.keyboard.press('Escape')
+check('エージェントの追加と削除', added.length === 3 && added.some((r) => r.includes('npx -y some agent --acp')) && pickerName === 'Extra' && remaining === 2, `${added.join(' | ')} → 残り ${remaining}`)
+
+await clickMenu('AI パネル')
+await page.waitForTimeout(200)
+if (await page.locator('#ai-col').isVisible()) await clickMenu('AI パネル')
+check('⇧⌘L で閉じる', !(await page.locator('#ai-col').isVisible()))
+await page.locator('#toggle-ai').click()
+const openedByButton = await page.locator('#ai-col').isVisible()
+const pressed = await page.locator('#toggle-ai').getAttribute('aria-pressed')
+await page.locator('#toggle-ai').click()
+check('右上のボタンで開閉', openedByButton && pressed === 'true' && !(await page.locator('#ai-col').isVisible()))
+
+// AI パネルを使わない設定: 入り口（ボタン・メニュー・設定の欄）ごと消え、⇧⌘L でも開かない
+await page.locator('#open-settings').click()
+await page.locator('#settings-ai').click()
+await page.waitForTimeout(300)
+const agentsHidden = await page.locator('#settings-agents').isHidden()
+await page.keyboard.press('Escape')
+const buttonHidden = await page.locator('#toggle-ai').isHidden()
+const menuItem = await app.evaluate(({ Menu }) => {
+  const find = (items) => { for (const i of items) { if (i.label === 'AI パネル') return i; const s = i.submenu && find(i.submenu.items); if (s) return s } }
+  const item = find(Menu.getApplicationMenu().items)
+  return item ? { visible: item.visible, enabled: item.enabled } : null
+})
+await clickMenu('AI パネル')
+await page.waitForTimeout(200)
+const stillClosed = !(await page.locator('#ai-col').isVisible())
+await page.locator('#open-settings').click()
+await page.locator('#settings-ai').click()
+await page.waitForTimeout(300)
+await page.keyboard.press('Escape')
+const back = await page.locator('#toggle-ai').isVisible()
+check('AI パネルを使わない設定', agentsHidden && buttonHidden && menuItem?.visible === false && stillClosed && back, JSON.stringify({ agentsHidden, buttonHidden, menuItem, stillClosed, back }))
 
 check('コンソールにエラーなし', errors.length === 0, errors.slice(0, 3).join(' | '))
 await page.screenshot({ path: join(shots, '4-final.png') })

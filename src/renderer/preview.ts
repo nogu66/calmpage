@@ -170,6 +170,14 @@ export class Preview {
     for (const v of this.visible) void this.render(v, scale)
   }
 
+  // 見ているページ（画面の上から 1/3 の高さにあるページ）。PDF が無ければ 0。
+  currentPage(): number {
+    const y = this.scroller.scrollTop + this.scroller.clientHeight / 3
+    let page = 0
+    for (const [i, v] of this.pages.entries()) if (v.el.offsetTop <= y) page = i + 1
+    return page
+  }
+
   // ソースの位置に対応する PDF 上の場所へスクロールし、しばらく印を出す。
   reveal(target: SyncTarget): void {
     const view = this.pages[target.page - 1]
