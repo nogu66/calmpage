@@ -16,6 +16,7 @@ export interface Settings {
   auto: boolean
   split: number
   sidebar: boolean
+  preview: boolean
   theme: Theme
   palette: Palette
   language: Lang
@@ -27,7 +28,7 @@ export interface Settings {
   aiWidth: number
 }
 
-const DEFAULTS: Settings = { folder: null, file: null, zoom: 1, auto: true, split: 0.5, sidebar: true, theme: 'system', palette: 'paper', language: 'en', aiEnabled: true, ai: false, agents: DEFAULT_AGENTS, agent: 'claude', aiWidth: 440 }
+const DEFAULTS: Settings = { folder: null, file: null, zoom: 1, auto: true, split: 0.5, sidebar: true, preview: true, theme: 'system', palette: 'paper', language: 'en', aiEnabled: true, ai: false, agents: DEFAULT_AGENTS, agent: 'claude', aiWidth: 440 }
 
 function path(): string {
   return join(app.getPath('userData'), 'settings.json')

@@ -4,6 +4,13 @@ All notable changes to Sumitex are listed here. The format follows [Keep a Chang
 
 ## Unreleased
 
+## 0.3.0 - 2026-10-21
+
+### Added
+
+- Show or hide the PDF preview with ⇧⌘P or the panel button at the right of the title bar. The editor takes the full width while it is hidden, and ⌘J opens it again.
+- A panel button at the left of the title bar shows or hides the file list (also ⌘B).
+
 ## 0.2.0 - 2026-10-21
 
 ### Changed

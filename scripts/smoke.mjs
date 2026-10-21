@@ -109,8 +109,13 @@ check('ソース → PDF', mark)
 await page.screenshot({ path: join(shots, '3-forward.png') })
 
 // 5. ⌘クリック: PDF からソースへ
+// 組み直すとページの要素が入れ替わるので、位置が取れるまで待つ
 const target = page.locator('.page').first()
-const box = await target.boundingBox()
+let box = null
+for (let i = 0; i < 20 && !box; i++) {
+  box = await target.boundingBox()
+  if (!box) await page.waitForTimeout(250)
+}
 await page.locator('.cm-content').click()
 await page.keyboard.press('Meta+ArrowUp')
 await target.click({ modifiers: ['Meta'], position: { x: box.width * 0.35, y: box.height * 0.42 } })
@@ -330,6 +335,33 @@ const openedByButton = await page.locator('#ai-col').isVisible()
 const pressed = await page.locator('#toggle-ai').getAttribute('aria-pressed')
 await page.locator('#toggle-ai').click()
 check('右上のボタンで開閉', openedByButton && pressed === 'true' && !(await page.locator('#ai-col').isVisible()))
+
+// PDF プレビューを閉じるとエディターが広がり、⌘J（カーソル位置を PDF で表示）で開き直す
+const widths = () => page.evaluate(() => ({
+  editor: Math.round(document.querySelector('#editor-col').getBoundingClientRect().width),
+  preview: Math.round(document.querySelector('#preview-col').getBoundingClientRect().width),
+  page: Math.round(document.querySelector('#pdf-scroll .page')?.getBoundingClientRect().width ?? 0),
+  pressed: document.querySelector('#toggle-preview').getAttribute('aria-pressed')
+}))
+const shown = await widths()
+await page.locator('#toggle-preview').click()
+await page.waitForTimeout(400)
+const hiddenPreview = await widths()
+await clickMenu('カーソル位置を PDF で表示')
+await page.waitForTimeout(800)
+const reopened = await widths()
+check(
+  'PDF プレビューを閉じて開く',
+  hiddenPreview.preview === 0 && hiddenPreview.page === shown.page && hiddenPreview.pressed === 'false' && hiddenPreview.editor > shown.editor + 200 && reopened.preview === shown.preview && reopened.pressed === 'true' && Math.abs(reopened.page - shown.page) <= 1,
+  `${JSON.stringify(shown)} → ${JSON.stringify(hiddenPreview)} → ${JSON.stringify(reopened)}`
+)
+
+// 左上のボタンでファイル一覧を閉じて開く
+await page.locator('#toggle-sidebar').click()
+const sidebarClosed = await page.evaluate(() => [document.body.classList.contains('no-sidebar'), document.querySelector('#toggle-sidebar').getAttribute('aria-pressed')])
+await page.locator('#toggle-sidebar').click()
+const sidebarOpened = await page.evaluate(() => [document.body.classList.contains('no-sidebar'), document.querySelector('#toggle-sidebar').getAttribute('aria-pressed')])
+check('左上のボタンでファイル一覧を開閉', sidebarClosed.join() === 'true,false' && sidebarOpened.join() === 'false,true', `${sidebarClosed} → ${sidebarOpened}`)
 
 // AI パネルを使わない設定: 入り口（ボタン・メニュー・設定の欄）ごと消え、⇧⌘L でも開かない
 await page.locator('#open-settings').click()

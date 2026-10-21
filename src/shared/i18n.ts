@@ -33,6 +33,8 @@ const en = {
   'pdf.none': 'No PDF',
 
   'ai.toggle': 'AI Panel (⇧⌘L)',
+  'preview.toggle': 'PDF Preview (⇧⌘P)',
+  'sidebar.toggle': 'File List (⌘B)',
   'ai.context': 'Context',
   'ai.insertHint': 'Insert into the prompt',
   'ai.lines': '{file} · L{range}',
@@ -133,6 +135,7 @@ const en = {
   'menu.sidebar': 'File List',
   'menu.problems': 'Problems',
   'menu.ai': 'AI Panel',
+  'menu.preview': 'PDF Preview',
   'menu.zoomIn': 'Zoom In PDF',
   'menu.zoomOut': 'Zoom Out PDF',
   'menu.zoomReset': 'Fit PDF to Width',
@@ -177,6 +180,8 @@ const ja: Record<Key, Entry> = {
   'pdf.none': 'PDF はありません',
 
   'ai.toggle': 'AI パネル (⇧⌘L)',
+  'preview.toggle': 'PDF プレビュー (⇧⌘P)',
+  'sidebar.toggle': 'ファイル一覧 (⌘B)',
   'ai.context': 'AI に渡す',
   'ai.insertHint': '入力欄に貼り込む',
   'ai.lines': '{file} · {range} 行',
@@ -277,6 +282,7 @@ const ja: Record<Key, Entry> = {
   'menu.sidebar': 'ファイル一覧',
   'menu.problems': '問題の一覧',
   'menu.ai': 'AI パネル',
+  'menu.preview': 'PDF プレビュー',
   'menu.zoomIn': 'PDF を拡大',
   'menu.zoomOut': 'PDF を縮小',
   'menu.zoomReset': 'PDF を幅に合わせる',

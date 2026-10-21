@@ -251,6 +251,11 @@ function renderProblems(open: boolean): void {
 
 async function forwardSync(): Promise<void> {
   if (!editor.path || !preview.loaded) return
+  // 閉じていたら開き、今の幅で描き直してから場所を示す
+  if (!previewShown()) {
+    togglePreview()
+    preview.setZoom(preview.zoom)
+  }
   const { line, column } = editor.cursor()
   const box = await sumi.forwardSync(editor.path, line, column)
   if (box) preview.reveal(box)
@@ -650,9 +655,29 @@ function setupAi(): void {
   setupAiDivider()
 }
 
+function setSidebarShown(show: boolean): void {
+  document.body.classList.toggle('no-sidebar', !show)
+  $('toggle-sidebar').setAttribute('aria-pressed', String(show))
+}
+
 function toggleSidebar(): void {
-  const hidden = document.body.classList.toggle('no-sidebar')
-  sumi.saveSettings({ sidebar: !hidden })
+  const show = document.body.classList.contains('no-sidebar')
+  setSidebarShown(show)
+  sumi.saveSettings({ sidebar: show })
+}
+
+function previewShown(): boolean {
+  return !document.body.classList.contains('no-preview')
+}
+
+function setPreviewShown(show: boolean): void {
+  document.body.classList.toggle('no-preview', !show)
+  $('toggle-preview').setAttribute('aria-pressed', String(show))
+}
+
+function togglePreview(): void {
+  setPreviewShown(!previewShown())
+  sumi.saveSettings({ preview: previewShown() })
 }
 
 // ---------- メニューと外部の変更 ----------
@@ -670,6 +695,8 @@ function handleMenu(command: string): void {
       return void sumi.openPdfExternally()
     case 'toggle-sidebar':
       return toggleSidebar()
+    case 'toggle-preview':
+      return togglePreview()
     case 'toggle-ai':
       return toggleAi()
     case 'toggle-problems':
@@ -811,13 +838,16 @@ async function init(): Promise<void> {
   sumi.onSettings(applySettings)
   setupSettings()
   setSplit(initial.split)
-  document.body.classList.toggle('no-sidebar', !initial.sidebar)
+  setSidebarShown(initial.sidebar)
+  setPreviewShown(initial.preview)
   preview.zoom = initial.zoom
   setupDivider()
   setAiWidth(initial.aiWidth)
   setupAi()
 
   $('open-folder').addEventListener('click', () => void sumi.chooseFolder())
+  $('toggle-preview').addEventListener('click', togglePreview)
+  $('toggle-sidebar').addEventListener('click', toggleSidebar)
   $('problems-close').addEventListener('click', () => ($('problems').hidden = true))
   $('status').addEventListener('click', () => ($('problems').hidden = !$('problems').hidden))
 

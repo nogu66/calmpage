@@ -183,10 +183,27 @@ button {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 16px 0 84px;
+  padding: 0 16px 0 74px;
   background: var(--ground);
   -webkit-app-region: drag;
   user-select: none;
+}
+
+/* 信号の 3 色のすぐ右に、ファイル一覧を開け閉めするボタン、その右にパンくず */
+.title-left {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+#toggle-sidebar {
+  flex: none;
+  -webkit-app-region: no-drag;
+}
+
+body.empty #toggle-sidebar {
+  visibility: hidden;
 }
 
 .crumbs {
@@ -306,6 +323,16 @@ body.no-sidebar #workspace {
 }
 
 body.no-sidebar #sidebar {
+  visibility: hidden;
+}
+
+/* PDF プレビューを閉じたら、仕切りと PDF の列を幅 0 にしてエディターを広げる（要素は残すので、列の並びは崩れない） */
+body.no-preview #workspace {
+  grid-template-columns: var(--sidebar) 1fr 0 0 var(--ai-divider) var(--ai);
+}
+
+body.no-preview #divider,
+body.no-preview #preview-col {
   visibility: hidden;
 }
 

@@ -199,6 +199,7 @@ function buildMenu(): void {
         submenu: [
           { label: tr('menu.forwardSync'), accelerator: 'CmdOrCtrl+J', click: command('forward-sync') },
           { label: tr('menu.sidebar'), accelerator: 'CmdOrCtrl+B', click: command('toggle-sidebar') },
+          { label: tr('menu.preview'), accelerator: 'CmdOrCtrl+Shift+P', click: command('toggle-preview') },
           { label: tr('menu.problems'), accelerator: 'CmdOrCtrl+Shift+M', click: command('toggle-problems') },
           { label: tr('menu.ai'), accelerator: 'CmdOrCtrl+Shift+L', click: command('toggle-ai'), visible: aiEnabled, enabled: aiEnabled },
           { type: 'separator' },

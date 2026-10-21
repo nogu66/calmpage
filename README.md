@@ -97,7 +97,9 @@ Open a folder (or a single `.tex` file) with ⌘O. Sumitex finds the root docume
 | Compile | ⌘R |
 | Show the cursor position in the PDF | ⌘J |
 | Jump from the PDF to the source | ⌘-click in the PDF |
-| File list / Problems | ⌘B / ⇧⌘M |
+| File list | ⌘B, or the button at the left of the title bar |
+| Problems | ⇧⌘M |
+| Show or hide the PDF preview | ⇧⌘P, or the button at the right of the title bar |
 | AI panel | ⇧⌘L, or the button at the right of the title bar |
 | Zoom the PDF in / out / fit to width | ⌘= / ⌘- / ⌘0 |
 | Settings | ⌘, or the gear at the bottom left |

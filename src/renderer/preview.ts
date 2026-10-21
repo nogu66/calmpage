@@ -159,8 +159,9 @@ export class Preview {
     this.relayoutTimer = window.setTimeout(() => this.relayout(), 120)
   }
 
+  // PDF プレビューを閉じている間（列の幅が 0 で、余白だけが残る）は描き直さない。開くと ResizeObserver がまた呼ぶ
   private relayout(): void {
-    if (!this.pages.length) return
+    if (!this.pages.length || this.scroller.clientWidth < 100) return
     const ratio = this.scroller.scrollTop / Math.max(1, this.scroller.scrollHeight)
     const scale = this.fitScale(this.pages[0].page)
     if (Math.abs(scale - this.scale) < 0.001) return
