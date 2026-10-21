@@ -1,4 +1,5 @@
 import * as acp from '@agentclientprotocol/sdk'
+import { app } from 'electron'
 import { spawn, type ChildProcess } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
 import { readFile, writeFile } from 'node:fs/promises'
@@ -8,7 +9,7 @@ import { agentEnv, which } from './shell-env'
 import { loadSettings, type AgentConfig } from './settings'
 
 // ACP（Agent Client Protocol）に対応したエージェントを子プロセスで起動し、標準入出力の JSON-RPC で話す。
-// Sumi はクライアント側: 会話の流れ（session/update）と許可の確認を画面へ渡し、ファイルの読み書きに応える。
+// Sumitex はクライアント側: 会話の流れ（session/update）と許可の確認を画面へ渡し、ファイルの読み書きに応える。
 
 const AUTH_REQUIRED = -32000
 
@@ -129,7 +130,7 @@ export class AcpAgents {
       Readable.toWeb(child.stdout!) as ReadableStream<Uint8Array>
     )
     const conn = acp
-      .client({ name: 'Sumi' })
+      .client({ name: 'Sumitex' })
       .onNotification(acp.methods.client.session.update, ({ params }) => this.send('acp:update', agent.id, params.update))
       .onRequest(acp.methods.client.session.requestPermission, ({ params, signal }) => this.askPermission(agent.id, params, signal))
       .onRequest(acp.methods.client.fs.readTextFile, async ({ params }) => ({ content: await readLines(params.path, params.line, params.limit) }))
@@ -148,7 +149,7 @@ export class AcpAgents {
       ready: conn.agent.request(acp.methods.agent.initialize, {
         protocolVersion: acp.PROTOCOL_VERSION,
         clientCapabilities: { fs: { readTextFile: true, writeTextFile: true }, terminal: false },
-        clientInfo: { name: 'Sumi', version: '0.1.0' }
+        clientInfo: { name: 'Sumitex', version: app.getVersion() }
       })
     }
     running.ready.catch(() => {}) // 失敗は newSession で拾う

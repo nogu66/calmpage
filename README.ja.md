@@ -1,8 +1,8 @@
 <p align="center">
-  <img src="build/icon.png" width="112" alt="Sumi TeX のアイコン" />
+  <img src="build/icon.png" width="112" alt="Sumitex のアイコン" />
 </p>
 
-<h1 align="center">Sumi TeX</h1>
+<h1 align="center">Sumitex</h1>
 
 <p align="center">
   静かな LaTeX エディター（macOS）。左で書いて、右で PDF を見る。1 つの画面で。
@@ -21,18 +21,18 @@
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="docs/images/sumi-dark.png" />
-    <img src="docs/images/sumi-light.png" width="920" alt="左に LaTeX のソース、右にコンパイルした PDF を並べた Sumi TeX の画面" />
+    <img src="docs/images/sumi-light.png" width="920" alt="左に LaTeX のソース、右にコンパイルした PDF を並べた Sumitex の画面" />
   </picture>
 </p>
 
 > [!NOTE]
-> Sumi TeX はまだ開発の初期段階です。macOS で動き、Apple シリコンで確認しています。
+> Sumitex はまだ開発の初期段階です。macOS で動き、Apple シリコンで確認しています。
 
-## なぜ Sumi TeX か
+## なぜ Sumitex か
 
-Sumi TeX（略して Sumi、墨のこと）は、書くことの邪魔をしない LaTeX エディターです。
+Sumitex は、書くことの邪魔をしない LaTeX エディターです。名前は墨（sumi）から取りました。
 
-- **手元の TeX のまま。** 今ある `latexmk` でコンパイルし、`.latexmkrc` にも従うので、今のプロジェクトがそのまま動きます。Sumi 自体は何もアップロードしません。
+- **手元の TeX のまま。** 今ある `latexmk` でコンパイルし、`.latexmkrc` にも従うので、今のプロジェクトがそのまま動きます。Sumitex 自体は何もアップロードしません。
 - **1 つの窓で、設定なしに。** フォルダを開けば書き始められます。打つたびに PDF が追いかけ、SyncTeX で行き来できます。
 - **AI は使いたい人だけ。** Claude Code や Codex など好きなエージェントに、開いている書類を文脈として渡して頼めます。使わないなら AI パネルを切れば、ないものとして扱えます。
 
@@ -61,7 +61,7 @@ Apple シリコンの Mac（macOS 12 以降）で動きます。
 brew install --cask nogu66/tap/sumitex
 ```
 
-インストール用のスクリプトでも入れられます（`/Applications` に `Sumi.app` を置きます）:
+インストール用のスクリプトでも入れられます（`/Applications` に `Sumitex.app` を置きます）:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/nogu66/sumitex/main/install.sh | bash
@@ -79,7 +79,7 @@ curl -fsSL https://raw.githubusercontent.com/nogu66/sumitex/main/install.sh | ba
 git clone https://github.com/nogu66/sumitex.git
 cd sumitex
 npm install
-npm run dist      # release/mac-arm64/Sumi.app ができる
+npm run dist      # release/mac-arm64/Sumitex.app ができる
 ```
 
 ### TeX
@@ -107,7 +107,7 @@ npm run dist      # release/mac-arm64/Sumi.app ができる
 
 - **本体の書類。** `% !TEX root = …` を最優先します。なければ `\documentclass` のあるファイルはそれ自身が本体です。それもなければ、前回そのファイルを読み込んでいた本体を使うか、そのファイルを `\input` している書類を探します。
 - **`.latexmkrc` があれば**、その設定（処理系・出力先・`TEXINPUTS`）どおりにコンパイルします。
-- **なければ** 処理系を選びます。`ltjs*` のクラス・`luatexja`・日本語を含む書類は LuaLaTeX、`js*` のクラスは upLaTeX、`fontspec` は XeLaTeX、それ以外は pdfLaTeX です。中間ファイルは `~/Library/Application Support/sumi/build/` に出すので、フォルダは散らかりません。
+- **なければ** 処理系を選びます。`ltjs*` のクラス・`luatexja`・日本語を含む書類は LuaLaTeX、`js*` のクラスは upLaTeX、`fontspec` は XeLaTeX、それ以外は pdfLaTeX です。中間ファイルは `~/Library/Application Support/Sumitex/build/` に出すので、フォルダは散らかりません。
 
 ## AI パネル
 
@@ -115,22 +115,22 @@ AI パネルは使わなくてもかまいません。⇧⌘L かタイトルバ
 
 <!-- ここに画面写真を置く: AI パネルで差分と「許可 / やめる」が出ているところ -->
 
-- **[ACP](https://agentclientprotocol.com) のエージェントなら何でも。** Agent Client Protocol に対応したエージェントは、Zed と同じように Sumi の会話画面で動きます。Claude Code と Codex は最初から入っていて、手元の `claude` / `codex` のログイン（または `ANTHROPIC_API_KEY` / `OPENAI_API_KEY`）をそのまま使います。ほかは **設定 → エージェント** で ACP の登録簿から足せます。
+- **[ACP](https://agentclientprotocol.com) のエージェントなら何でも。** Agent Client Protocol に対応したエージェントは、Zed と同じように Sumitex の会話画面で動きます。Claude Code と Codex は最初から入っていて、手元の `claude` / `codex` のログイン（または `ANTHROPIC_API_KEY` / `OPENAI_API_KEY`）をそのまま使います。ほかは **設定 → エージェント** で ACP の登録簿から足せます。
 - **送るたびに文脈を添える。** 上のチップで、今のファイルと選択行、コンパイルのエラー、見ている PDF のページを添えます。押すと外せます。
 - **書き換えには必ず許可が要る。** エージェントがファイルを変える前に、差分と *許可* / *やめる* を出します。変わったファイルは読み直して、コンパイルし直します。
 - **本物の端末も。** *Terminal* を選ぶと、開いているフォルダでいつものログインシェルが開きます。そこで `claude` を起動すれば、Claude Code のコマンドがすべて使えます。ACP に対応していないエージェントも、端末のエージェントとして足せます。
 
 ## プライバシー
 
-- Sumi は利用状況を集めず、あなたや書類についての情報をどこにも送りません。
+- Sumitex は利用状況を集めず、あなたや書類についての情報をどこにも送りません。
 - 書類は、あなたの Mac の上で、あなたの TeX でコンパイルします。
 - AI エージェントは手元で、あなた自身のアカウントで動きます。エージェントが提供元に何を送るかは、そのエージェントと提供元の決まりによります。
-- Sumi 自体がネットにつなぐのは、設定で ACP の登録簿を開いたときだけです。最初から入っているエージェントは `npx` で取得するので、そのとき npm の登録簿に接続します。
+- Sumitex 自体がネットにつなぐのは、設定で ACP の登録簿を開いたときだけです。最初から入っているエージェントは `npx` で取得するので、そのとき npm の登録簿に接続します。
 
 ## よくある質問
 
 **Overleaf と何が違う？**
-Overleaf はブラウザで動き、サーバーでコンパイルします。Sumi は Mac のアプリで、手元の TeX でコンパイルし、ファイルは自分のディスクに置いたままです。
+Overleaf はブラウザで動き、サーバーでコンパイルします。Sumitex は Mac のアプリで、手元の TeX でコンパイルし、ファイルは自分のディスクに置いたままです。
 
 **AI がないと使えない？**
 使えます。**設定 → AI パネル** を切れば、PDF のプレビュー付きのエディターとして使えます。

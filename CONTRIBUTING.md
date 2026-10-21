@@ -1,9 +1,9 @@
-# Contributing to Sumi TeX
+# Contributing to Sumitex
 
 Thank you for helping. Bug reports, ideas, translations, and pull requests are all welcome.
 
 - **Found a bug?** [Open an issue](https://github.com/nogu66/sumitex/issues/new/choose) with the steps to reproduce it, your macOS version, and your TeX distribution.
-- **Have an idea?** Open a feature request first, so we can agree on the shape before you write code. Sumi aims to stay small and quiet, so new features are weighed carefully.
+- **Have an idea?** Open a feature request first, so we can agree on the shape before you write code. Sumitex aims to stay small and quiet, so new features are weighed carefully.
 - **Found a security problem?** Please don't open a public issue. See [SECURITY.md](SECURITY.md).
 
 ## Development setup
@@ -23,7 +23,7 @@ npm run dev        # run with hot reload
 | `npm run typecheck` | Type-check everything |
 | `npm run build` | Build into `out/` |
 | `npm start` | Run the built app |
-| `npm run dist` | Package `release/mac-arm64/Sumi.app` |
+| `npm run dist` | Package `release/mac-arm64/Sumitex.app` |
 
 ## Testing
 
@@ -58,7 +58,7 @@ The script copies the sample to a temporary folder, so the repository is not cha
 
 ## Project layout
 
-Sumi is an [Electron](https://www.electronjs.org) app built with [electron-vite](https://electron-vite.org).
+Sumitex is an [Electron](https://www.electronjs.org) app built with [electron-vite](https://electron-vite.org).
 
 | Path | What it does |
 | --- | --- |
@@ -81,7 +81,7 @@ Sumi is an [Electron](https://www.electronjs.org) app built with [electron-vite]
 | `src/renderer/style.css` | All styles; colors are CSS variables per palette and appearance |
 | `scripts/icon.mjs` | Exports `build/icon.svg` to the app icon and social images |
 | `scripts/screenshots.mjs` | Takes the README screenshots and GIF from `examples/sample` |
-| `examples/sample/` | A short multi-file paper for trying Sumi TeX and for the screenshots |
+| `examples/sample/` | A short multi-file paper for trying Sumitex and for the screenshots |
 
 ## Adding a language
 
@@ -98,8 +98,8 @@ Claude Code and Codex are launched through `npx` at fixed versions listed in `DE
 ## Releasing
 
 1. Bump `version` in `package.json` and move the *Unreleased* notes in `CHANGELOG.md` under the new version.
-2. Run `scripts/release.sh`. It builds the app, signs it ad hoc, and writes `release/Sumi-<version>-arm64-mac.zip` and `.dmg`. It prints the SHA-256 of the zip.
-3. Commit, tag `v<version>`, push, and create the GitHub release with both files: `gh release create v<version> release/Sumi-<version>-arm64-mac.zip release/Sumi-<version>-arm64.dmg`.
+2. Run `scripts/release.sh`. It builds the app, signs it ad hoc, and writes `release/Sumitex-<version>-arm64-mac.zip` and `.dmg`. It prints the SHA-256 of the zip.
+3. Commit, tag `v<version>`, push, and create the GitHub release with both files: `gh release create v<version> release/Sumitex-<version>-arm64-mac.zip release/Sumitex-<version>-arm64.dmg`.
 4. In [nogu66/homebrew-tap](https://github.com/nogu66/homebrew-tap), update `version` and `sha256` in `Casks/sumitex.rb`.
 
 `install.sh` always installs the latest release, so it needs no change.

@@ -1,5 +1,5 @@
 import { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, shell } from 'electron'
-import { statSync } from 'node:fs'
+import { copyFileSync, existsSync, mkdirSync, statSync } from 'node:fs'
 import { readFile, writeFile } from 'node:fs/promises'
 import { dirname, join, sep } from 'node:path'
 import { AcpAgents } from './acp'
@@ -16,6 +16,15 @@ process.env.PATH = ['/Library/TeX/texbin', '/opt/homebrew/bin', '/usr/local/bin'
 
 // 自動テスト用: 設定の保存先と、起動時に開くパスを差し替えられる。
 if (process.env.SUMI_USER_DATA) app.setPath('userData', process.env.SUMI_USER_DATA)
+// 0.1.0 までの名前は Sumi だったので、前の場所の設定を一度だけ引き継ぐ
+else {
+  const now = join(app.getPath('userData'), 'settings.json')
+  const before = join(app.getPath('appData'), 'Sumi', 'settings.json')
+  if (!existsSync(now) && existsSync(before)) {
+    mkdirSync(dirname(now), { recursive: true })
+    copyFileSync(before, now)
+  }
+}
 
 let win: BrowserWindow | null = null
 let folder: string | null = loadSettings().folder
@@ -290,7 +299,7 @@ function createWindow(): void {
     height: 920,
     minWidth: 900,
     minHeight: 560,
-    title: 'Sumi',
+    title: 'Sumitex',
     titleBarStyle: 'hiddenInset',
     trafficLightPosition: { x: 14, y: 13 },
     backgroundColor: groundColor(),

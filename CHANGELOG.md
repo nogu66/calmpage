@@ -1,8 +1,14 @@
 # Changelog
 
-All notable changes to Sumi TeX are listed here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
+All notable changes to Sumitex are listed here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## Unreleased
+
+## 0.2.0 - 2026-10-21
+
+### Changed
+
+- Renamed the app to Sumitex (`Sumitex.app`, bundle ID `me.noguchy.sumitex`). Settings from Sumi are carried over on first launch, and the install script removes the old `Sumi.app`.
 
 ## 0.1.0 - 2026-10-21
 

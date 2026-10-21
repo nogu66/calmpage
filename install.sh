@@ -1,19 +1,19 @@
 #!/bin/bash
-# Installs the latest Sumi TeX release.
+# Installs the latest Sumitex release.
 #   curl -fsSL https://raw.githubusercontent.com/nogu66/sumitex/main/install.sh | bash
 # Set SUMI_INSTALL_DIR to install somewhere other than /Applications.
 set -euo pipefail
 
 REPO="nogu66/sumitex"
-APP="Sumi.app"
+APP="Sumitex.app"
 
 fail() {
   echo "error: $*" >&2
   exit 1
 }
 
-[ "$(uname -s)" = "Darwin" ] || fail "Sumi TeX runs on macOS only."
-[ "$(uname -m)" = "arm64" ] || fail "Sumi TeX needs a Mac with Apple silicon. On Intel Macs, build it from source: https://github.com/$REPO#build-from-source"
+[ "$(uname -s)" = "Darwin" ] || fail "Sumitex runs on macOS only."
+[ "$(uname -m)" = "arm64" ] || fail "Sumitex needs a Mac with Apple silicon. On Intel Macs, build it from source: https://github.com/$REPO#build-from-source"
 
 # The latest release redirects to .../releases/tag/v<version>
 tag=$(curl -fsSLI -o /dev/null -w '%{url_effective}' "https://github.com/$REPO/releases/latest")
@@ -30,13 +30,13 @@ mkdir -p "$dir"
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 
-echo "Downloading Sumi TeX $version..."
-curl -fL --progress-bar -o "$tmp/sumi.zip" "https://github.com/$REPO/releases/download/$tag/Sumi-$version-arm64-mac.zip"
+echo "Downloading Sumitex $version..."
+curl -fL --progress-bar -o "$tmp/sumi.zip" "https://github.com/$REPO/releases/download/$tag/Sumitex-$version-arm64-mac.zip"
 ditto -x -k "$tmp/sumi.zip" "$tmp"
 
-if [ -d "$dir/$APP" ] && pgrep -qf "$dir/$APP/Contents/MacOS/Sumi"; then
-  echo "Quitting the running Sumi TeX..."
-  osascript -e 'tell application id "me.noguchy.sumi" to quit' >/dev/null 2>&1 || true
+if [ -d "$dir/$APP" ] && pgrep -qf "$dir/$APP/Contents/MacOS/Sumitex"; then
+  echo "Quitting the running Sumitex..."
+  osascript -e 'tell application id "me.noguchy.sumitex" to quit' >/dev/null 2>&1 || true
   sleep 2
 fi
 
@@ -45,11 +45,19 @@ ditto "$tmp/$APP" "$dir/$APP"
 # The app is not notarized yet. curl does not mark downloads as quarantined, but clear it in case.
 xattr -dr com.apple.quarantine "$dir/$APP" 2>/dev/null || true
 
-echo "Installed Sumi TeX $version to $dir/$APP"
+echo "Installed Sumitex $version to $dir/$APP"
+
+# Until 0.1.0 the app was called Sumi. Remove that copy; its settings move over on first launch.
+old="$dir/Sumi.app"
+if [ -d "$old" ] && [ "$(defaults read "$old/Contents/Info" CFBundleIdentifier 2>/dev/null)" = "me.noguchy.sumi" ]; then
+  osascript -e 'tell application id "me.noguchy.sumi" to quit' >/dev/null 2>&1 || true
+  rm -rf "$old"
+  echo "Removed the old Sumi.app"
+fi
 
 if ! command -v latexmk >/dev/null 2>&1 && [ ! -x /Library/TeX/texbin/latexmk ]; then
   echo
-  echo "Sumi TeX compiles with latexmk, which was not found. Install a TeX distribution, for example:"
+  echo "Sumitex compiles with latexmk, which was not found. Install a TeX distribution, for example:"
   echo "  brew install --cask mactex-no-gui"
 fi
 

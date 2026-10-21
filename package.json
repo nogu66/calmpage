@@ -1,8 +1,8 @@
 {
-  "name": "sumi",
-  "productName": "Sumi",
-  "version": "0.1.0",
-  "description": "Sumi TeX: a quiet LaTeX editor for macOS with a live PDF preview and an optional AI panel",
+  "name": "sumitex",
+  "productName": "Sumitex",
+  "version": "0.2.0",
+  "description": "Sumitex: a quiet LaTeX editor for macOS with a live PDF preview and an optional AI panel",
   "license": "MIT",
   "author": "nogu66",
   "repository": {
@@ -22,8 +22,8 @@
     "screenshots": "electron-vite build && node scripts/screenshots.mjs"
   },
   "build": {
-    "appId": "me.noguchy.sumi",
-    "productName": "Sumi",
+    "appId": "me.noguchy.sumitex",
+    "productName": "Sumitex",
     "directories": {
       "output": "release"
     },
