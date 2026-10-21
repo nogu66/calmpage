@@ -95,6 +95,15 @@ All UI text lives in `src/shared/i18n.ts`.
 
 Claude Code and Codex are launched through `npx` at fixed versions listed in `DEFAULT_AGENTS` (`src/shared/agents.ts`). To update them, use the versions from the [ACP registry](https://cdn.agentclientprotocol.com/registry/v1/latest/registry.json) and try a short prompt with each agent before opening a pull request.
 
+## Releasing
+
+1. Bump `version` in `package.json` and move the *Unreleased* notes in `CHANGELOG.md` under the new version.
+2. Run `scripts/release.sh`. It builds the app, signs it ad hoc, and writes `release/Sumi-<version>-arm64-mac.zip` and `.dmg`. It prints the SHA-256 of the zip.
+3. Commit, tag `v<version>`, push, and create the GitHub release with both files: `gh release create v<version> release/Sumi-<version>-arm64-mac.zip release/Sumi-<version>-arm64.dmg`.
+4. In [nogu66/homebrew-tap](https://github.com/nogu66/homebrew-tap), update `version` and `sha256` in `Casks/sumitex.rb`.
+
+`install.sh` always installs the latest release, so it needs no change.
+
 ## Style
 
 - TypeScript in strict mode. Run `npm run typecheck` before you push.

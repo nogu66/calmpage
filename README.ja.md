@@ -53,17 +53,23 @@ Sumi TeX（略して Sumi、墨のこと）は、書くことの邪魔をしな�
 
 ## 入れ方
 
-Apple シリコンの Mac で動きます。
+Apple シリコンの Mac（macOS 12 以降）で動きます。
 
-1. [最新のリリース](https://github.com/nogu66/sumitex/releases/latest) から `Sumi-<版>-arm64-mac.zip` を落とします。
-2. 展開して、`Sumi.app` を `/Applications` に移します。
-3. まだ Apple の署名がないので、初めて開くときは macOS に止められます。ターミナルで一度だけ次を打ってください。
+[Homebrew](https://brew.sh) で入れる場合:
 
-   ```bash
-   xattr -dr com.apple.quarantine /Applications/Sumi.app
-   ```
+```bash
+brew install --cask nogu66/tap/sumitex
+```
 
-   または、一度開こうとしてから **システム設定 → プライバシーとセキュリティ** で **このまま開く** を押します。
+インストール用のスクリプトでも入れられます（`/Applications` に `Sumi.app` を置きます）:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/nogu66/sumitex/main/install.sh | bash
+```
+
+更新も同じです。`brew upgrade --cask sumitex` か、スクリプトをもう一度実行してください。
+
+[最新のリリース](https://github.com/nogu66/sumitex/releases/latest) から `.dmg` を落として入れることもできます。ただ、まだ Apple の公証を受けていないので、落とした `.dmg` のアプリは初回に macOS に止められます。一度開こうとしてから、**システム設定 → プライバシーとセキュリティ** で **このまま開く** を押してください。Homebrew とスクリプトなら、この手順は要りません。
 
 ### 自分でビルドする
 
@@ -78,7 +84,7 @@ npm run dist      # release/mac-arm64/Sumi.app ができる
 
 ### TeX
 
-書類のコンパイルには、`latexmk` と `synctex` を含む TeX（[MacTeX](https://www.tug.org/mactex/) など）が要ります。TeX は `/Library/TeX/texbin` から、ほかの道具はログインシェルの `PATH` から探すので、Finder から開いても動きます。
+書類のコンパイルには、`latexmk` と `synctex` を含む TeX（[MacTeX](https://www.tug.org/mactex/) など。`brew install --cask mactex-no-gui` で入ります）が要ります。TeX は `/Library/TeX/texbin` から、ほかの道具はログインシェルの `PATH` から探すので、Finder から開いても動きます。
 
 ## 使い方
 

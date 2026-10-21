@@ -53,17 +53,23 @@ Sumi TeX (“Sumi” for short; 墨 means ink in Japanese) is a LaTeX editor tha
 
 ## Install
 
-Sumi TeX runs on Macs with Apple silicon.
+Sumi TeX runs on Macs with Apple silicon (macOS 12 or later).
 
-1. Download `Sumi-<version>-arm64-mac.zip` from the [latest release](https://github.com/nogu66/sumitex/releases/latest).
-2. Unzip it and move `Sumi.app` to `/Applications`.
-3. The app is not signed by Apple yet, so macOS blocks it the first time. Run this once in Terminal:
+With [Homebrew](https://brew.sh):
 
-   ```bash
-   xattr -dr com.apple.quarantine /Applications/Sumi.app
-   ```
+```bash
+brew install --cask nogu66/tap/sumitex
+```
 
-   Or try to open it, then go to **System Settings → Privacy & Security** and click **Open Anyway**.
+Or with the install script, which puts `Sumi.app` in `/Applications`:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/nogu66/sumitex/main/install.sh | bash
+```
+
+Update the same way: `brew upgrade --cask sumitex`, or run the script again.
+
+You can also download the `.dmg` from the [latest release](https://github.com/nogu66/sumitex/releases/latest). The app is not notarized by Apple yet, so macOS blocks a downloaded `.dmg` the first time: try to open the app, then go to **System Settings → Privacy & Security** and click **Open Anyway**. Homebrew and the install script don't need this step.
 
 ### Build from source
 
@@ -78,7 +84,7 @@ npm run dist      # creates release/mac-arm64/Sumi.app
 
 ### TeX
 
-To compile documents, Sumi needs a TeX distribution with `latexmk` and `synctex`, such as [MacTeX](https://www.tug.org/mactex/). It finds TeX in `/Library/TeX/texbin` and other tools in your login shell's `PATH`, so it works when opened from Finder.
+To compile documents, Sumi needs a TeX distribution with `latexmk` and `synctex`, such as [MacTeX](https://www.tug.org/mactex/) (`brew install --cask mactex-no-gui`). It finds TeX in `/Library/TeX/texbin` and other tools in your login shell's `PATH`, so it works when opened from Finder.
 
 ## Usage
 
