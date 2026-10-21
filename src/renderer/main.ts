@@ -298,6 +298,8 @@ async function onFileChanged(path: string, content: string): Promise<void> {
 
 async function init(): Promise<void> {
   const settings = await sumi.initial()
+  document.documentElement.dataset.palette = settings.palette
+  sumi.onPalette((palette) => (document.documentElement.dataset.palette = palette))
   autoBuild = settings.auto
   $<HTMLInputElement>('auto').checked = autoBuild
   $<HTMLInputElement>('auto').addEventListener('change', (e) => {

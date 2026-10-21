@@ -1,21 +1,31 @@
-/* 色は 6 つだけ: 背景・面・罫線・文字・控えめな文字・差し色。
-   ライト / ダーク / システムの切り替えは main 側の nativeTheme.themeSource が
-   prefers-color-scheme を切り替えることで行う。 */
+/* 見た目は「一枚の紙」: 罫線も囲みも使わず、余白で分ける。差し色は持たず、墨の濃淡だけで表す。
+   配色（data-palette）は 紙（標準）/ 苔 / 砂。苔と砂はエディターと PDF が角丸の面として浮かぶ。
+   明るさは main 側の nativeTheme.themeSource が prefers-color-scheme を切り替える。 */
 :root {
   color-scheme: light dark;
-  --bg: #faf9f5;
-  --surface: #f3f1ea;
-  --border: #e8e6dc;
-  --text: #141413;
-  --muted: #73716a;
-  --accent: #d97757;
-
-  --faint: #b0aea5;
-  --hover: rgba(20, 20, 19, 0.05);
-  --active-line: rgba(20, 20, 19, 0.035);
-  --selection: rgba(217, 119, 87, 0.2);
-  --syntax-command: #b4573a;
-  --pdf-bg: #ecebe4;
+  --ground: #f4f4f2;
+  --card: #fbfbfa;
+  --pdf-bg: #eeeeeb;
+  --raised: #ffffff;
+  --border: #ebebe8;
+  --text: #1a1a1a;
+  --muted: #6b6b68;
+  --faint: #b8b8b4;
+  --accent: #1a1a1a;
+  --on-accent: #fbfbfa;
+  --syntax-command: #1a1a1a;
+  --syntax-weight: 600;
+  --selection: rgba(26, 26, 26, 0.08);
+  --active-line: rgba(26, 26, 26, 0.025);
+  --hover: rgba(26, 26, 26, 0.04);
+  --file-active: rgba(26, 26, 26, 0.06);
+  --file-active-shadow: none;
+  --paper-shadow: 0 0 0 1px rgba(0, 0, 0, 0.05), 0 2px 10px rgba(0, 0, 0, 0.06);
+  --card-radius: 0px;
+  --card-shadow: none;
+  --gap: 0px;
+  --divider: 5px;
+  --divider-line: var(--border);
 
   --font-ui: -apple-system, 'Hiragino Sans', 'Noto Sans JP', sans-serif;
   --font-mono: 'SF Mono', Menlo, 'Hiragino Sans', monospace;
@@ -26,19 +36,119 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #1b1b19;
-    --surface: #222220;
-    --border: #31302c;
-    --text: #e8e6dc;
-    --muted: #9a978e;
-    --accent: #d97757;
+    --ground: #111111;
+    --card: #181818;
+    --pdf-bg: #0d0d0d;
+    --raised: #1f1f1f;
+    --border: #272727;
+    --text: #e6e6e4;
+    --muted: #979794;
+    --faint: #4f4f4d;
+    --accent: #e6e6e4;
+    --on-accent: #151515;
+    --syntax-command: #e6e6e4;
+    --selection: rgba(230, 230, 228, 0.12);
+    --active-line: rgba(230, 230, 228, 0.03);
+    --hover: rgba(230, 230, 228, 0.05);
+    --file-active: rgba(230, 230, 228, 0.08);
+    --paper-shadow: 0 2px 12px rgba(0, 0, 0, 0.5);
+  }
+}
 
-    --faint: #5f5d57;
-    --hover: rgba(250, 249, 245, 0.06);
-    --active-line: rgba(250, 249, 245, 0.04);
-    --selection: rgba(217, 119, 87, 0.28);
-    --syntax-command: #e3906f;
-    --pdf-bg: #141413;
+/* ---------- カスタムテーマ: 苔・砂（浮かぶ角丸の面） ---------- */
+
+:root[data-palette='moss'],
+:root[data-palette='sand'] {
+  --syntax-weight: 400;
+  --card-radius: 12px;
+  --gap: 8px;
+  --divider: 8px;
+  --divider-line: transparent;
+}
+
+:root[data-palette='moss'] {
+  --ground: #e3e7df;
+  --card: #f9faf7;
+  --pdf-bg: #eef1eb;
+  --raised: #fbfcfa;
+  --border: #d6dcd1;
+  --text: #1a1d19;
+  --muted: #5f675d;
+  --faint: #a8b1a5;
+  --accent: #56704d;
+  --on-accent: #f9faf7;
+  --syntax-command: #4b6544;
+  --selection: rgba(86, 112, 77, 0.15);
+  --active-line: rgba(26, 29, 25, 0.03);
+  --hover: rgba(26, 29, 25, 0.04);
+  --file-active: #f9faf7;
+  --file-active-shadow: 0 0 0 1px rgba(26, 29, 25, 0.04), 0 1px 3px rgba(26, 29, 25, 0.06);
+  --card-shadow: 0 0 0 1px rgba(26, 29, 25, 0.04), 0 1px 3px rgba(26, 29, 25, 0.06);
+  --paper-shadow: 0 0 0 1px rgba(0, 0, 0, 0.06), 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+:root[data-palette='sand'] {
+  --ground: #ebe8e1;
+  --card: #faf9f6;
+  --pdf-bg: #f1efea;
+  --raised: #fdfcfa;
+  --border: #e1ddd4;
+  --text: #1c1b19;
+  --muted: #6b675f;
+  --faint: #b1aca2;
+  --accent: #b5603f;
+  --on-accent: #faf9f6;
+  --syntax-command: #a5553a;
+  --selection: rgba(181, 96, 63, 0.14);
+  --active-line: rgba(28, 27, 25, 0.03);
+  --hover: rgba(28, 27, 25, 0.04);
+  --file-active: #faf9f6;
+  --file-active-shadow: 0 0 0 1px rgba(28, 27, 25, 0.04), 0 1px 3px rgba(28, 27, 25, 0.06);
+  --card-shadow: 0 0 0 1px rgba(28, 27, 25, 0.04), 0 1px 3px rgba(28, 27, 25, 0.06);
+  --paper-shadow: 0 0 0 1px rgba(0, 0, 0, 0.06), 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root[data-palette='moss'] {
+    --ground: #121511;
+    --card: #1a1e19;
+    --pdf-bg: #161915;
+    --raised: #20251f;
+    --border: #283026;
+    --text: #e2e7df;
+    --muted: #939c90;
+    --faint: #4f584c;
+    --accent: #8fb083;
+    --on-accent: #121511;
+    --syntax-command: #9dbb91;
+    --selection: rgba(143, 176, 131, 0.18);
+    --active-line: rgba(226, 231, 223, 0.035);
+    --hover: rgba(226, 231, 223, 0.05);
+    --file-active: #1a1e19;
+    --file-active-shadow: 0 0 0 1px rgba(255, 255, 255, 0.03);
+    --card-shadow: 0 0 0 1px rgba(255, 255, 255, 0.03);
+    --paper-shadow: 0 2px 12px rgba(0, 0, 0, 0.5);
+  }
+
+  :root[data-palette='sand'] {
+    --ground: #141412;
+    --card: #1e1d1b;
+    --pdf-bg: #191816;
+    --raised: #24231f;
+    --border: #2d2c28;
+    --text: #e7e4dc;
+    --muted: #9b968b;
+    --faint: #58544d;
+    --accent: #d98a6a;
+    --on-accent: #141412;
+    --syntax-command: #e09a7b;
+    --selection: rgba(217, 138, 106, 0.2);
+    --active-line: rgba(231, 228, 220, 0.035);
+    --hover: rgba(231, 228, 220, 0.05);
+    --file-active: #1e1d1b;
+    --file-active-shadow: 0 0 0 1px rgba(255, 255, 255, 0.03);
+    --card-shadow: 0 0 0 1px rgba(255, 255, 255, 0.03);
+    --paper-shadow: 0 2px 12px rgba(0, 0, 0, 0.5);
   }
 }
 
@@ -51,7 +161,7 @@ body {
   margin: 0;
   height: 100%;
   overflow: hidden;
-  background: var(--bg);
+  background: var(--ground);
   color: var(--text);
   font: 13px/1.5 var(--font-ui);
   -webkit-font-smoothing: antialiased;
@@ -63,16 +173,15 @@ button {
   cursor: pointer;
 }
 
-/* ---------- タイトルバー ---------- */
+/* ---------- タイトルバー（地と同じ色、線なし） ---------- */
 
 #titlebar {
   height: var(--titlebar);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 12px 0 84px;
-  border-bottom: 1px solid var(--border);
-  background: var(--surface);
+  padding: 0 16px 0 84px;
+  background: var(--ground);
   -webkit-app-region: drag;
   user-select: none;
 }
@@ -80,16 +189,20 @@ button {
 .crumbs {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   min-width: 0;
   white-space: nowrap;
+  font-size: 12.5px;
 }
 
 #folder-name {
   font-weight: 600;
 }
 
-.crumb-sep,
+.crumb-sep {
+  color: var(--faint);
+}
+
 #file-name {
   color: var(--muted);
   overflow: hidden;
@@ -97,27 +210,27 @@ button {
 }
 
 #dirty {
-  width: 7px;
-  height: 7px;
+  width: 6px;
+  height: 6px;
   border-radius: 50%;
-  background: var(--accent);
+  background: var(--muted);
   flex: none;
 }
 
 .status {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 16px;
   -webkit-app-region: no-drag;
   flex: none;
+  font-size: 12px;
+  color: var(--muted);
 }
 
 .auto {
   display: flex;
   align-items: center;
-  gap: 5px;
-  color: var(--muted);
-  font-size: 12px;
+  gap: 6px;
   cursor: pointer;
 }
 
@@ -126,27 +239,21 @@ button {
   margin: 0;
 }
 
-#engine {
-  color: var(--muted);
-  font-size: 12px;
-}
-
 .status-pill {
   display: flex;
   align-items: center;
   gap: 7px;
-  border: 1px solid var(--border);
-  background: var(--bg);
-  border-radius: 999px;
-  padding: 3px 11px 3px 9px;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  padding: 4px 2px;
   font-size: 12px;
-  min-width: 96px;
 }
 
-/* 状態は差し色 1 色で表す: エラー = 塗り、警告 = 輪、組版中 = 点滅、それ以外 = 灰色 */
+/* 状態は墨の濃淡と形だけで表す: エラー = 塗り、警告 = 輪、組版中 = 点滅、それ以外 = 薄い点 */
 .status-pill i {
-  width: 8px;
-  height: 8px;
+  width: 7px;
+  height: 7px;
   border-radius: 50%;
   background: var(--faint);
 }
@@ -154,6 +261,10 @@ button {
 .status-pill[data-state='error'] i,
 .status-pill[data-state='building'] i {
   background: var(--accent);
+}
+
+.status-pill[data-state='error'] {
+  font-weight: 600;
 }
 
 .status-pill[data-state='warning'] i {
@@ -171,13 +282,14 @@ button {
   }
 }
 
-/* ---------- 3 列の作業領域 ---------- */
+/* ---------- 作業領域 ---------- */
 
 #workspace {
   height: calc(100% - var(--titlebar));
   display: grid;
-  grid-template-columns: var(--sidebar) calc((100% - var(--sidebar)) * var(--split)) 5px 1fr;
+  grid-template-columns: var(--sidebar) calc((100% - var(--sidebar) - var(--gap)) * var(--split)) var(--divider) 1fr;
   grid-template-rows: minmax(0, 1fr);
+  padding: 0 var(--gap) var(--gap) 0;
 }
 
 #workspace > * {
@@ -185,18 +297,16 @@ button {
 }
 
 body.no-sidebar #workspace {
-  --sidebar: 0px;
+  --sidebar: var(--gap);
 }
 
 body.no-sidebar #sidebar {
-  display: none;
+  visibility: hidden;
 }
 
 #sidebar {
-  background: var(--surface);
-  border-right: 1px solid var(--border);
   overflow-y: auto;
-  padding: 10px 0 20px;
+  padding: 6px 4px 20px 8px;
 }
 
 #file-list {
@@ -206,7 +316,7 @@ body.no-sidebar #sidebar {
 }
 
 #file-list li {
-  padding: 3px 14px;
+  padding: 4px 10px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -215,17 +325,20 @@ body.no-sidebar #sidebar {
 #file-list li.dir {
   color: var(--muted);
   font-size: 11px;
-  margin-top: 10px;
+  margin-top: 12px;
   direction: rtl;
   text-align: left;
 }
 
+#file-list li.dir:first-child {
+  margin-top: 0;
+}
+
 #file-list li.file {
   cursor: default;
-  border-radius: 5px;
-  margin: 0 6px;
-  padding: 3px 10px 3px 14px;
-  position: relative;
+  border-radius: 7px;
+  margin: 1px 0;
+  color: var(--muted);
 }
 
 #file-list li.file:hover {
@@ -233,20 +346,25 @@ body.no-sidebar #sidebar {
 }
 
 #file-list li.file.active {
-  background: var(--border);
+  background: var(--file-active);
+  box-shadow: var(--file-active-shadow);
+  color: var(--text);
   font-weight: 600;
 }
 
-#file-list li.file.root::before {
-  content: '';
-  position: absolute;
-  left: 5px;
-  top: 50%;
-  width: 4px;
-  height: 4px;
-  margin-top: -2px;
-  border-radius: 50%;
-  background: var(--accent);
+/* いま組んでいる本体: 下線で示す */
+#file-list li.file.root {
+  text-decoration: underline;
+  text-decoration-color: var(--accent);
+  text-decoration-thickness: 1.5px;
+  text-underline-offset: 4px;
+}
+
+#editor-col,
+#preview-col {
+  border-radius: var(--card-radius);
+  box-shadow: var(--card-shadow);
+  overflow: hidden;
 }
 
 #editor-col {
@@ -254,6 +372,7 @@ body.no-sidebar #sidebar {
   display: flex;
   flex-direction: column;
   min-width: 0;
+  background: var(--card);
 }
 
 #editor {
@@ -261,14 +380,15 @@ body.no-sidebar #sidebar {
   min-height: 0;
 }
 
+/* 紙ではエディターと PDF の間に細い線を 1 本だけ引く（苔・砂は面の隙間が境目になる） */
 #divider {
   cursor: col-resize;
-  background: linear-gradient(to right, transparent 2px, var(--border) 2px, var(--border) 3px, transparent 3px);
+  background: linear-gradient(to right, transparent calc(50% - 0.5px), var(--divider-line) calc(50% - 0.5px), var(--divider-line) calc(50% + 0.5px), transparent calc(50% + 0.5px));
 }
 
 #divider:hover,
 body.resizing #divider {
-  background: linear-gradient(to right, transparent 1px, var(--accent) 1px, var(--accent) 4px, transparent 4px);
+  background: linear-gradient(to right, transparent calc(50% - 1px), var(--faint) calc(50% - 1px), var(--faint) calc(50% + 1px), transparent calc(50% + 1px));
 }
 
 body.resizing {
@@ -287,7 +407,7 @@ body.resizing #preview-col {
   display: flex;
   flex-direction: column;
   border-top: 1px solid var(--border);
-  background: var(--surface);
+  background: var(--card);
 }
 
 #problems[hidden] {
@@ -298,7 +418,7 @@ body.resizing #preview-col {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 6px 12px 6px 16px;
+  padding: 8px 12px 6px 20px;
   font-size: 12px;
   font-weight: 600;
 }
@@ -315,14 +435,14 @@ body.resizing #preview-col {
 #problem-list {
   list-style: none;
   margin: 0;
-  padding: 0 0 8px;
+  padding: 0 0 10px;
   overflow-y: auto;
 }
 
 #problem-list li {
   display: flex;
   gap: 12px;
-  padding: 4px 16px;
+  padding: 4px 20px;
   cursor: default;
   font-size: 12.5px;
 }
@@ -369,7 +489,7 @@ body.resizing #preview-col {
   word-break: break-word;
 }
 
-/* ---------- PDF（ページは紙の色のまま、周りだけテーマに合わせる） ---------- */
+/* ---------- PDF（ページは紙の色のまま） ---------- */
 
 #preview-col {
   position: relative;
@@ -381,7 +501,7 @@ body.resizing #preview-col {
   position: absolute;
   inset: 0;
   overflow: auto;
-  padding: 20px;
+  padding: 24px;
 }
 
 #pdf-scroll .pages {
@@ -394,10 +514,8 @@ body.resizing #preview-col {
 
 .page {
   position: relative;
-  background: #faf9f5;
-  box-shadow:
-    0 0 0 1px rgba(20, 20, 19, 0.08),
-    0 2px 10px rgba(20, 20, 19, 0.12);
+  background: #fdfdfb;
+  box-shadow: var(--paper-shadow);
 }
 
 .page canvas {
@@ -409,8 +527,8 @@ body.resizing #preview-col {
 .sync-mark {
   position: absolute;
   border-radius: 3px;
-  background: rgba(217, 119, 87, 0.22);
-  outline: 2px solid rgba(217, 119, 87, 0.7);
+  background: rgba(120, 120, 120, 0.18);
+  outline: 2px solid rgba(60, 60, 60, 0.55);
   pointer-events: none;
   animation: sync-fade 1.6s ease-out forwards;
 }
@@ -477,7 +595,7 @@ body.empty #welcome {
   border: none;
   border-radius: 999px;
   background: var(--accent);
-  color: #faf9f5;
+  color: var(--on-accent);
   padding: 8px 18px;
   font-weight: 600;
 }

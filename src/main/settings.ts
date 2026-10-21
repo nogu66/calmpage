@@ -3,6 +3,7 @@ import { join } from 'node:path'
 import { app } from 'electron'
 
 export type Theme = 'system' | 'light' | 'dark'
+export type Palette = 'paper' | 'moss' | 'sand'
 
 export interface Settings {
   folder: string | null
@@ -12,9 +13,10 @@ export interface Settings {
   split: number
   sidebar: boolean
   theme: Theme
+  palette: Palette
 }
 
-const DEFAULTS: Settings = { folder: null, file: null, zoom: 1, auto: true, split: 0.5, sidebar: true, theme: 'system' }
+const DEFAULTS: Settings = { folder: null, file: null, zoom: 1, auto: true, split: 0.5, sidebar: true, theme: 'system', palette: 'paper' }
 
 function path(): string {
   return join(app.getPath('userData'), 'settings.json')

@@ -4,7 +4,7 @@ import { readFile, writeFile } from 'node:fs/promises'
 import { dirname, join, sep } from 'node:path'
 import { backwardSync, build, forwardSync, resolveRoot, type BuildResult } from './build'
 import { FolderWatcher, listProjectFiles } from './files'
-import { loadSettings, saveSettings, type Theme } from './settings'
+import { loadSettings, saveSettings, type Palette, type Theme } from './settings'
 
 // Finder から起動するとシェルの PATH を引き継がないため、TeX と Homebrew の場所を足しておく。
 process.env.PATH = ['/Library/TeX/texbin', '/opt/homebrew/bin', '/usr/local/bin', process.env.PATH].join(':')
@@ -80,10 +80,21 @@ function openPath(path: string): void {
   }
 }
 
-// テーマは nativeTheme で切り替える。画面の CSS（prefers-color-scheme）とウィンドウの枠が一緒に変わる。
+// 明るさは nativeTheme で切り替える。画面の CSS（prefers-color-scheme）とウィンドウの枠が一緒に変わる。
+// 配色（紙・苔・砂）は画面側の data-palette で切り替える。ここでは起動時の地の色だけ合わせる。
+const GROUND: Record<Palette, [light: string, dark: string]> = {
+  paper: ['#f4f4f2', '#111111'],
+  moss: ['#e3e7df', '#121511'],
+  sand: ['#ebe8e1', '#141412']
+}
+
+function groundColor(): string {
+  return GROUND[loadSettings().palette][nativeTheme.shouldUseDarkColors ? 1 : 0]
+}
+
 function applyTheme(theme: Theme): void {
   nativeTheme.themeSource = theme
-  win?.setBackgroundColor(nativeTheme.shouldUseDarkColors ? '#1b1b19' : '#faf9f5')
+  win?.setBackgroundColor(groundColor())
 }
 
 function setTheme(theme: Theme): void {
@@ -92,14 +103,27 @@ function setTheme(theme: Theme): void {
   buildMenu()
 }
 
+function setPalette(palette: Palette): void {
+  saveSettings({ palette })
+  win?.setBackgroundColor(groundColor())
+  send('palette', palette)
+  buildMenu()
+}
+
 function buildMenu(): void {
   const command = (name: string) => () => send('menu', name)
-  const theme = loadSettings().theme
+  const { theme, palette } = loadSettings()
   const themeItem = (label: string, value: Theme): Electron.MenuItemConstructorOptions => ({
     label,
     type: 'radio',
     checked: theme === value,
     click: () => setTheme(value)
+  })
+  const paletteItem = (label: string, value: Palette): Electron.MenuItemConstructorOptions => ({
+    label,
+    type: 'radio',
+    checked: palette === value,
+    click: () => setPalette(value)
   })
   Menu.setApplicationMenu(
     Menu.buildFromTemplate([
@@ -131,8 +155,12 @@ function buildMenu(): void {
           { label: 'PDF を幅に合わせる', accelerator: 'CmdOrCtrl+0', click: command('zoom-reset') },
           { type: 'separator' },
           {
-            label: 'テーマ',
+            label: '明るさ',
             submenu: [themeItem('システムに合わせる', 'system'), themeItem('ライト', 'light'), themeItem('ダーク', 'dark')]
+          },
+          {
+            label: '配色',
+            submenu: [paletteItem('紙（標準）', 'paper'), paletteItem('苔', 'moss'), paletteItem('砂', 'sand')]
           },
           { type: 'separator' },
           { role: 'toggleDevTools' }
@@ -194,7 +222,7 @@ function createWindow(): void {
     title: 'Sumi',
     titleBarStyle: 'hiddenInset',
     trafficLightPosition: { x: 14, y: 13 },
-    backgroundColor: nativeTheme.shouldUseDarkColors ? '#1b1b19' : '#faf9f5',
+    backgroundColor: groundColor(),
     // 自動テスト中は最前面に出さない（手元で打っているキー入力をエディターが奪わないように）
     show: !process.env.SUMI_USER_DATA,
     webPreferences: {

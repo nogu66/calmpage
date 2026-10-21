@@ -7,20 +7,21 @@ import { EditorState, Transaction, type Extension } from '@codemirror/state'
 import { EditorView, keymap } from '@codemirror/view'
 import { tags as t } from '@lezer/highlight'
 
-// 色分けは控えめに: 命令は差し色、コメントと括弧は灰色、それ以外は本文の色。
+// 色分けは控えめに: 命令は差し色（紙では太字の墨）、コメントは灰色、括弧は薄く、それ以外は本文の色。
 const latexHighlight = HighlightStyle.define([
-  { tag: t.tagName, color: 'var(--syntax-command)' },
-  { tag: [t.comment, t.bracket], color: 'var(--muted)' },
+  { tag: t.tagName, color: 'var(--syntax-command)', fontWeight: 'var(--syntax-weight)' },
+  { tag: t.comment, color: 'var(--muted)' },
+  { tag: t.bracket, color: 'var(--faint)' },
   { tag: t.invalid, color: 'var(--syntax-command)', textDecoration: 'underline wavy' }
 ])
 
 const theme = EditorView.theme({
-  '&': { height: '100%', backgroundColor: 'var(--bg)', color: 'var(--text)' },
+  '&': { height: '100%', backgroundColor: 'var(--card)', color: 'var(--text)' },
   '&.cm-focused': { outline: 'none' },
   '.cm-scroller': { fontFamily: 'var(--font-mono)', fontSize: '13.5px', lineHeight: '1.7' },
   '.cm-content': { padding: '14px 0 40vh', caretColor: 'var(--accent)' },
   '.cm-line': { padding: '0 22px 0 10px' },
-  '.cm-gutters': { backgroundColor: 'var(--bg)', color: 'var(--faint)', border: 'none', paddingLeft: '8px' },
+  '.cm-gutters': { backgroundColor: 'var(--card)', color: 'var(--faint)', border: 'none', paddingLeft: '8px' },
   '.cm-activeLineGutter': { backgroundColor: 'transparent', color: 'var(--text)' },
   '.cm-activeLine': { backgroundColor: 'var(--active-line)' },
   '.cm-cursor': { borderLeftColor: 'var(--accent)', borderLeftWidth: '2px' },
@@ -30,8 +31,8 @@ const theme = EditorView.theme({
   '.cm-foldGutter span': { color: 'var(--faint)' },
   '.cm-matchingBracket': { backgroundColor: 'var(--hover)', outline: '1px solid var(--faint)' },
   '.cm-searchMatch': { backgroundColor: 'var(--selection)' },
-  '.cm-panels': { backgroundColor: 'var(--surface)', color: 'var(--text)', borderColor: 'var(--border)' },
-  '.cm-tooltip': { backgroundColor: 'var(--surface)', color: 'var(--text)', border: '1px solid var(--border)', borderRadius: '6px' },
+  '.cm-panels': { backgroundColor: 'var(--raised)', color: 'var(--text)', borderColor: 'var(--border)' },
+  '.cm-tooltip': { backgroundColor: 'var(--raised)', color: 'var(--text)', border: '1px solid var(--border)', borderRadius: '6px' },
   '.cm-lintRange-error': { backgroundImage: 'none', textDecoration: 'underline wavy var(--accent) 1px', textUnderlineOffset: '3px' },
   '.cm-lintRange-warning': { backgroundImage: 'none', textDecoration: 'underline dotted var(--accent) 1px', textUnderlineOffset: '3px' },
   '.cm-lintRange-info': { backgroundImage: 'none' }
