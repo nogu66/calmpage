@@ -1,19 +1,19 @@
 name: Feature request
-description: Suggest an idea for Sumitex
+description: Suggest an idea for Calmpage
 labels: [enhancement]
 body:
   - type: textarea
     id: problem
     attributes:
       label: What are you trying to do?
-      description: Describe the problem or the moment where Sumitex gets in your way.
+      description: Describe the problem or the moment where Calmpage gets in your way.
     validations:
       required: true
   - type: textarea
     id: idea
     attributes:
       label: What would help?
-      description: Your idea for a solution. Sumitex aims to stay small and quiet, so tell us how this keeps it simple.
+      description: Your idea for a solution. Calmpage aims to stay small and quiet, so tell us how this keeps it simple.
   - type: textarea
     id: alternatives
     attributes:

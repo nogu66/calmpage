@@ -1,10 +1,14 @@
 # Changelog
 
-All notable changes to Sumitex are listed here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
+All notable changes to Calmpage are listed here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## Unreleased
 
-## 0.3.0 - 2026-10-21
+## 0.3.0 - 2026-10-23
+
+### Changed
+
+- Renamed the app to Calmpage (`Calmpage.app`, bundle ID `me.noguchy.calmpage`, repository `nogu66/calmpage`, Homebrew cask `calmpage`). Settings from Sumitex or Sumi are carried over on first launch, and the install script removes the old app.
 
 ### Added
 

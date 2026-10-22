@@ -15,12 +15,12 @@ import { loadSettings, saveSettings, type AgentConfig, type Palette, type Settin
 process.env.PATH = ['/Library/TeX/texbin', '/opt/homebrew/bin', '/usr/local/bin', process.env.PATH].join(':')
 
 // 自動テスト用: 設定の保存先と、起動時に開くパスを差し替えられる。
-if (process.env.SUMI_USER_DATA) app.setPath('userData', process.env.SUMI_USER_DATA)
-// 0.1.0 までの名前は Sumi だったので、前の場所の設定を一度だけ引き継ぐ
+if (process.env.CALMPAGE_USER_DATA) app.setPath('userData', process.env.CALMPAGE_USER_DATA)
+// 前の名前（0.2.0 までは Sumitex、0.1.0 までは Sumi）の設定を一度だけ引き継ぐ。新しい方を優先する
 else {
   const now = join(app.getPath('userData'), 'settings.json')
-  const before = join(app.getPath('appData'), 'Sumi', 'settings.json')
-  if (!existsSync(now) && existsSync(before)) {
+  const before = ['Sumitex', 'Sumi'].map((name) => join(app.getPath('appData'), name, 'settings.json')).find((path) => existsSync(path))
+  if (!existsSync(now) && before) {
     mkdirSync(dirname(now), { recursive: true })
     copyFileSync(before, now)
   }
@@ -30,7 +30,7 @@ let win: BrowserWindow | null = null
 let folder: string | null = loadSettings().folder
 let currentRoot: string | null = null
 let currentPdf: string | null = null
-let pendingOpen: string | null = process.env.SUMI_OPEN ?? null
+let pendingOpen: string | null = process.env.CALMPAGE_OPEN ?? null
 
 const watcher = new FolderWatcher((path, content) => win?.webContents.send('file:changed', path, content))
 const terminals = new Terminals(send)
@@ -300,12 +300,12 @@ function createWindow(): void {
     height: 920,
     minWidth: 900,
     minHeight: 560,
-    title: 'Sumitex',
+    title: 'Calmpage',
     titleBarStyle: 'hiddenInset',
     trafficLightPosition: { x: 14, y: 13 },
     backgroundColor: groundColor(),
     // 自動テスト中は最前面に出さない（手元で打っているキー入力をエディターが奪わないように）
-    show: !process.env.SUMI_USER_DATA,
+    show: !process.env.CALMPAGE_USER_DATA,
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: true,
@@ -314,7 +314,7 @@ function createWindow(): void {
     }
   })
   win.on('closed', () => (win = null))
-  if (process.env.SUMI_USER_DATA) win.showInactive()
+  if (process.env.CALMPAGE_USER_DATA) win.showInactive()
   if (process.env.ELECTRON_RENDERER_URL) void win.loadURL(process.env.ELECTRON_RENDERER_URL)
   else void win.loadFile(join(__dirname, '../renderer/index.html'))
 }

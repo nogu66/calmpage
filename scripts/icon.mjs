@@ -20,7 +20,7 @@ const render = async (svg, size, path) => {
   await page.screenshot({ path, omitBackground: true })
 }
 
-const iconset = join(mkdtempSync(join(tmpdir(), 'sumi-icon-')), 'icon.iconset')
+const iconset = join(mkdtempSync(join(tmpdir(), 'calmpage-icon-')), 'icon.iconset')
 mkdirSync(iconset)
 for (const base of [16, 32, 128, 256, 512]) {
   await render(app, base, join(iconset, `icon_${base}x${base}.png`))

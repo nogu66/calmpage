@@ -1,16 +1,16 @@
 {
-  "name": "sumitex",
-  "productName": "Sumitex",
+  "name": "calmpage",
+  "productName": "Calmpage",
   "version": "0.3.0",
-  "description": "Sumitex: a quiet LaTeX editor for macOS with a live PDF preview and an optional AI panel",
+  "description": "Calmpage: a quiet LaTeX editor for macOS with a live PDF preview and an optional AI panel",
   "license": "MIT",
   "author": "nogu66",
   "repository": {
     "type": "git",
-    "url": "https://github.com/nogu66/sumitex.git"
+    "url": "https://github.com/nogu66/calmpage.git"
   },
-  "homepage": "https://github.com/nogu66/sumitex",
-  "bugs": "https://github.com/nogu66/sumitex/issues",
+  "homepage": "https://github.com/nogu66/calmpage",
+  "bugs": "https://github.com/nogu66/calmpage/issues",
   "main": "out/main/index.js",
   "private": true,
   "scripts": {
@@ -22,8 +22,8 @@
     "screenshots": "electron-vite build && node scripts/screenshots.mjs"
   },
   "build": {
-    "appId": "me.noguchy.sumitex",
-    "productName": "Sumitex",
+    "appId": "me.noguchy.calmpage",
+    "productName": "Calmpage",
     "directories": {
       "output": "release"
     },

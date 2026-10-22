@@ -5,16 +5,16 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 version=$(node -p "require('./package.json').version")
-app=release/mac-arm64/Sumitex.app
-zip=release/Sumitex-$version-arm64-mac.zip
+app=release/mac-arm64/Calmpage.app
+zip=release/Calmpage-$version-arm64-mac.zip
 
 npm run dist
 codesign --force --deep -s - "$app"
 codesign --verify --deep --strict "$app"
-rm -f "$zip" "release/Sumitex-$version-arm64.dmg"
+rm -f "$zip" "release/Calmpage-$version-arm64.dmg"
 ditto -c -k --sequesterRsrc --keepParent "$app" "$zip"
 npx electron-builder --mac dmg --arm64 --prepackaged "$app"
 
 echo
-ls -lh "$zip" "release/Sumitex-$version-arm64.dmg"
+ls -lh "$zip" "release/Calmpage-$version-arm64.dmg"
 echo "sha256 (zip, for the Homebrew cask): $(shasum -a 256 "$zip" | cut -d' ' -f1)"

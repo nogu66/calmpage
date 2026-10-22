@@ -8,7 +8,7 @@ let shellEnv: Promise<Record<string, string>> | null = null
 
 function loadShellEnv(): Promise<Record<string, string>> {
   shellEnv ??= new Promise((resolve) => {
-    const mark = '__SUMI_ENV__'
+    const mark = '__CALMPAGE_ENV__'
     const shell = process.env.SHELL || '/bin/zsh'
     execFile(shell, ['-ilc', `printf ${mark}; env -0; printf ${mark}`], { timeout: 8000, maxBuffer: 4 << 20 }, (_err, stdout) => {
       const env: Record<string, string> = {}

@@ -1,9 +1,9 @@
-# Contributing to Sumitex
+# Contributing to Calmpage
 
 Thank you for helping. Bug reports, ideas, translations, and pull requests are all welcome.
 
-- **Found a bug?** [Open an issue](https://github.com/nogu66/sumitex/issues/new/choose) with the steps to reproduce it, your macOS version, and your TeX distribution.
-- **Have an idea?** Open a feature request first, so we can agree on the shape before you write code. Sumitex aims to stay small and quiet, so new features are weighed carefully.
+- **Found a bug?** [Open an issue](https://github.com/nogu66/calmpage/issues/new/choose) with the steps to reproduce it, your macOS version, and your TeX distribution.
+- **Have an idea?** Open a feature request first, so we can agree on the shape before you write code. Calmpage aims to stay small and quiet, so new features are weighed carefully.
 - **Found a security problem?** Please don't open a public issue. See [SECURITY.md](SECURITY.md).
 
 ## Development setup
@@ -11,8 +11,8 @@ Thank you for helping. Bug reports, ideas, translations, and pull requests are a
 You need macOS, [Node.js](https://nodejs.org) 22 or later, and a TeX distribution with `latexmk` and `synctex` (for example [MacTeX](https://www.tug.org/mactex/)).
 
 ```bash
-git clone https://github.com/nogu66/sumitex.git
-cd sumitex
+git clone https://github.com/nogu66/calmpage.git
+cd calmpage
 npm install
 npm run dev        # run with hot reload
 ```
@@ -23,7 +23,7 @@ npm run dev        # run with hot reload
 | `npm run typecheck` | Type-check everything |
 | `npm run build` | Build into `out/` |
 | `npm start` | Run the built app |
-| `npm run dist` | Package `release/mac-arm64/Sumitex.app` |
+| `npm run dist` | Package `release/mac-arm64/Calmpage.app` |
 
 ## Testing
 
@@ -58,7 +58,7 @@ The script copies the sample to a temporary folder, so the repository is not cha
 
 ## Project layout
 
-Sumitex is an [Electron](https://www.electronjs.org) app built with [electron-vite](https://electron-vite.org).
+Calmpage is an [Electron](https://www.electronjs.org) app built with [electron-vite](https://electron-vite.org).
 
 | Path | What it does |
 | --- | --- |
@@ -81,7 +81,7 @@ Sumitex is an [Electron](https://www.electronjs.org) app built with [electron-vi
 | `src/renderer/style.css` | All styles; colors are CSS variables per palette and appearance |
 | `scripts/icon.mjs` | Exports `build/icon.svg` to the app icon and social images |
 | `scripts/screenshots.mjs` | Takes the README screenshots and GIF from `examples/sample` |
-| `examples/sample/` | A short multi-file paper for trying Sumitex and for the screenshots |
+| `examples/sample/` | A short multi-file paper for trying Calmpage and for the screenshots |
 
 ## Adding a language
 
@@ -98,9 +98,9 @@ Claude Code and Codex are launched through `npx` at fixed versions listed in `DE
 ## Releasing
 
 1. Bump `version` in `package.json` and move the *Unreleased* notes in `CHANGELOG.md` under the new version.
-2. Run `scripts/release.sh`. It builds the app, signs it ad hoc, and writes `release/Sumitex-<version>-arm64-mac.zip` and `.dmg`. It prints the SHA-256 of the zip.
-3. Commit, tag `v<version>`, push, and create the GitHub release with both files: `gh release create v<version> release/Sumitex-<version>-arm64-mac.zip release/Sumitex-<version>-arm64.dmg`.
-4. In [nogu66/homebrew-tap](https://github.com/nogu66/homebrew-tap), update `version` and `sha256` in `Casks/sumitex.rb`.
+2. Run `scripts/release.sh`. It builds the app, signs it ad hoc, and writes `release/Calmpage-<version>-arm64-mac.zip` and `.dmg`. It prints the SHA-256 of the zip.
+3. Commit, tag `v<version>`, push, and create the GitHub release with both files: `gh release create v<version> release/Calmpage-<version>-arm64-mac.zip release/Calmpage-<version>-arm64.dmg`.
+4. In [nogu66/homebrew-tap](https://github.com/nogu66/homebrew-tap), update `version` and `sha256` in `Casks/calmpage.rb`.
 
 `install.sh` always installs the latest release, so it needs no change.
 

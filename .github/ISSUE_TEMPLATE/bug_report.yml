@@ -30,7 +30,7 @@ body:
   - type: input
     id: sumi
     attributes:
-      label: Sumitex version or commit
+      label: Calmpage version or commit
       placeholder: 0.1.0 or a commit hash
   - type: input
     id: tex

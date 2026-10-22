@@ -23,7 +23,7 @@ export class Terminals {
     if (this.sessions.has(agent.id)) return null
     env.TERM = 'xterm-256color'
     env.COLORTERM = 'truecolor'
-    env.TERM_PROGRAM = 'Sumitex'
+    env.TERM_PROGRAM = 'Calmpage'
     delete env.TERM_PROGRAM_VERSION
     const command = agent.command === LOGIN_SHELL ? env.SHELL || '/bin/zsh' : agent.command
     const file = which(command, env.PATH)

@@ -2,7 +2,7 @@
 // 使い方: npm run build && node scripts/screenshots.mjs [--ai]
 //   --ai を付けると、本物の Claude Code に短い依頼を 1 回送り、書き換えの許可を求められた画面も撮る
 //   （撮ったら「やめる」を押すので、ファイルは変わらない）。手元の claude のログインが要る。
-// 出力: docs/images/（sumi-light.png / sumi-dark.png / sumi-typing.gif / sumi-typing.mp4 / sumi-ai.png）
+// 出力: docs/images/（calmpage-light.png / calmpage-dark.png / calmpage-typing.gif / calmpage-typing.mp4 / calmpage-ai.png）
 // 窓の枠（角丸・影・信号の 3 色）は Google Chrome で描いて重ねる。
 // 動画は画面を撮り続けた連番の画像から ffmpeg で作る（Electron では Playwright の録画が起動を止めてしまうため）。
 import { _electron as electron, chromium } from 'playwright-core'
@@ -17,7 +17,7 @@ const OUT = resolve('docs/images')
 const withAi = process.argv.includes('--ai')
 mkdirSync(OUT, { recursive: true })
 
-const work = mkdtempSync(join(tmpdir(), 'sumi-shots-'))
+const work = mkdtempSync(join(tmpdir(), 'calmpage-shots-'))
 const folder = join(work, 'ink-in-washi')
 cpSync(resolve('examples/sample'), folder, { recursive: true })
 
@@ -27,7 +27,7 @@ async function launch(settings) {
   const app = await electron.launch({
     args: ['.', '--force-device-scale-factor=2'],
     colorScheme: null, // Playwright は既定でライトに固定するので、アプリの明るさの設定に任せる
-    env: { ...process.env, SUMI_OPEN: join(folder, 'main.tex'), SUMI_USER_DATA: userData }
+    env: { ...process.env, CALMPAGE_OPEN: join(folder, 'main.tex'), CALMPAGE_USER_DATA: userData }
   })
   const page = await app.firstWindow()
   await app.evaluate(({ BrowserWindow }, [w, h]) => BrowserWindow.getAllWindows()[0].setContentSize(w, h), [WIDTH, HEIGHT])
@@ -86,7 +86,7 @@ async function still(settings, out, prepare) {
 
 // 1. ライトとダークの全体: 数式の多い節を開き、式の行にカーソルを置く
 for (const theme of ['light', 'dark']) {
-  await still({ theme, palette: 'paper' }, join(OUT, `sumi-${theme}.png`), async (page) => {
+  await still({ theme, palette: 'paper' }, join(OUT, `calmpage-${theme}.png`), async (page) => {
     await openFile(page, 'model.tex')
     await placeCursor(page, 'D\\,\\nabla^2 c')
     await page.waitForTimeout(400)
@@ -139,8 +139,8 @@ const CLIP = 620
   await lights.screenshot({ path: join(dir, 'lights.png'), omitBackground: true })
   await lights.close()
   const input = ['-f', 'concat', '-safe', '0', '-i', join(dir, 'list.txt'), '-i', join(dir, 'lights.png')]
-  const mp4 = join(OUT, 'sumi-typing.mp4')
-  const gif = join(OUT, 'sumi-typing.gif')
+  const mp4 = join(OUT, 'calmpage-typing.mp4')
+  const gif = join(OUT, 'calmpage-typing.gif')
   execFileSync('ffmpeg', ['-y', '-loglevel', 'error', ...input,
     '-filter_complex', '[0][1]overlay,fps=30,scale=1440:-2', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-movflags', '+faststart', mp4])
   execFileSync('ffmpeg', ['-y', '-loglevel', 'error', ...input, '-filter_complex',
@@ -153,7 +153,7 @@ if (withAi) {
   // GIF で書き足した 1 文を消すため、サンプルを写し直す
   rmSync(folder, { recursive: true, force: true })
   cpSync(resolve('examples/sample'), folder, { recursive: true })
-  await still({ theme: 'light', palette: 'paper', sidebar: false, ai: true, agent: 'claude' }, join(OUT, 'sumi-ai.png'), async (page) => {
+  await still({ theme: 'light', palette: 'paper', sidebar: false, ai: true, agent: 'claude' }, join(OUT, 'calmpage-ai.png'), async (page) => {
     const thread = '.thread:not([hidden])'
     await page.waitForFunction((t) => !!document.querySelector(`${t} .thread-hint`), thread, { timeout: 180_000 })
     await placeCursor(page, 'call \\emph{nijimi}.')

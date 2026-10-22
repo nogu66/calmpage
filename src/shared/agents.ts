@@ -1,4 +1,4 @@
-// 右の柱で呼び出すエージェント。ACP に対応したものは Sumitex の会話画面で、それ以外は端末ごと動かす。
+// 右の柱で呼び出すエージェント。ACP に対応したものは Calmpage の会話画面で、それ以外は端末ごと動かす。
 // 画面（設定の「元に戻す」）と main の両方から使うので shared に置く。
 
 export type AgentKind = 'acp' | 'terminal'

@@ -6,11 +6,11 @@ import { appendFileSync, cpSync, mkdirSync, mkdtempSync, readdirSync, readFileSy
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 
-const folder = process.argv[2] ? resolve(process.argv[2]) : join(mkdtempSync(join(tmpdir(), 'sumi-sample-')), 'sample')
+const folder = process.argv[2] ? resolve(process.argv[2]) : join(mkdtempSync(join(tmpdir(), 'calmpage-sample-')), 'sample')
 if (!process.argv[2]) cpSync(resolve('examples/sample'), folder, { recursive: true })
-const shots = resolve(process.argv[3] ?? mkdtempSync(join(tmpdir(), 'sumi-shots-')))
+const shots = resolve(process.argv[3] ?? mkdtempSync(join(tmpdir(), 'calmpage-shots-')))
 mkdirSync(shots, { recursive: true })
-const userData = mkdtempSync(join(tmpdir(), 'sumi-smoke-'))
+const userData = mkdtempSync(join(tmpdir(), 'calmpage-smoke-'))
 const results = []
 const check = (name, ok, detail = '') => {
   results.push({ name, ok })
@@ -32,7 +32,7 @@ writeFileSync(
 const app = await electron.launch({
   args: ['.'],
   // AI の柱では本物の claude / codex の代わりに zsh を動かす（端末の仕組みだけを確かめる）
-  env: { ...process.env, SUMI_OPEN: folder, SUMI_USER_DATA: userData }
+  env: { ...process.env, CALMPAGE_OPEN: folder, CALMPAGE_USER_DATA: userData }
 })
 const page = await app.firstWindow()
 const errors = []
