@@ -106,10 +106,16 @@ function baseName(path: string): string {
   return path.slice(path.lastIndexOf('/') + 1)
 }
 
+let stopTimer = 0
+
 function setStatus(state: StatusState, key: Key, params: Record<string, string | number> = {}): void {
   status = { state, key, params }
   $('status').dataset.state = state
   $('status-text').textContent = tr(key, params)
+  // 「中止」は長くかかっているときだけ出す（すぐ終わる自動コンパイルのたびに出し入れしない）
+  clearTimeout(stopTimer)
+  $('build-stop').hidden = true
+  if (state === 'building') stopTimer = window.setTimeout(() => ($('build-stop').hidden = false), 1500)
 }
 
 // PDF の代わりにプレビューの真ん中へ出す一言。null で消す。
@@ -514,9 +520,11 @@ async function onBuildFinished(result: BuildResult | null, file: string, error?:
     return
   }
   lastRoot = result.root
+  lastResult = result
   diagnostics = result.diagnostics
   $('engine').textContent = result.engine
   markActiveFile()
+  if (logShown()) void loadLog()
 
   const errors = diagnostics.filter((d) => d.severity === 'error').length
   const warnings = diagnostics.filter((d) => d.severity === 'warning').length
@@ -540,6 +548,12 @@ async function onBuildFinished(result: BuildResult | null, file: string, error?:
   document.body.classList.toggle('has-pdf', preview.loaded)
   setPdfNote(preview.loaded ? null : 'pdf.none')
   updateChips()
+}
+
+// 中止したときは、前の結果（問題の一覧と PDF）をそのまま残す
+function onBuildCancelled(): void {
+  setStatus('idle', 'status.cancelled')
+  if (!preview.loaded) setPdfNote('pdf.none')
 }
 
 // ---------- 問題の一覧 ----------
@@ -571,7 +585,101 @@ function renderProblems(open: boolean): void {
   }
   $('problems-title').textContent = diagnostics.length ? tr('problems.title', { n: diagnostics.length }) : tr('problems.none')
   if (open) $('problems').hidden = false
-  if (!diagnostics.some((d) => d.severity !== 'info')) $('problems').hidden = true
+  if (!logShown() && !diagnostics.some((d) => d.severity !== 'info')) $('problems').hidden = true
+}
+
+// ---------- 生のログ ----------
+
+// 「問題」の欄を切り替えて、.log と latexmk の出力をそのまま読む。latexmk のまとめが最後に来るので末尾から見せる
+let lastResult: BuildResult | null = null
+let logText = ''
+let logMarks: HTMLElement[] = []
+let logIndex = -1
+const MAX_MARKS = 2000
+
+function logShown(): boolean {
+  return $('problems').classList.contains('log-mode')
+}
+
+function showLog(show: boolean): void {
+  $('problems').classList.toggle('log-mode', show)
+  $('problems-tab').setAttribute('aria-pressed', String(!show))
+  $('log-tab').setAttribute('aria-pressed', String(show))
+  $('problem-list').hidden = show
+  $('log-view').hidden = !show
+  $('log-search').hidden = !show
+  $('log-count').hidden = !show
+  if (show) {
+    $('problems').hidden = false
+    void loadLog()
+  }
+}
+
+async function loadLog(): Promise<void> {
+  const result = lastResult
+  if (!result) {
+    logText = tr('log.empty')
+  } else {
+    const log = result.logPath ? await sumi.readFile(result.logPath).catch(() => '') : ''
+    if (result !== lastResult) return
+    const rule = (name: string): string => `──── ${name} ────\n`
+    logText = (log ? rule(baseName(result.logPath as string)) + log.trimEnd() + '\n\n' : '') + rule('latexmk') + result.output.trimEnd()
+  }
+  paintLog(true)
+}
+
+// 見つけた所に印を付ける。入力し直したときは末尾に近い所から見せる
+function paintLog(fromEnd: boolean): void {
+  const view = $('log-view')
+  const query = $<HTMLInputElement>('log-search').value
+  logMarks = []
+  if (!query) {
+    view.textContent = logText
+    $('log-count').textContent = ''
+    if (fromEnd) view.scrollTop = view.scrollHeight
+    return
+  }
+  const frag = document.createDocumentFragment()
+  const hay = logText.toLowerCase()
+  const needle = query.toLowerCase()
+  let at = 0
+  for (let i = hay.indexOf(needle); i !== -1 && logMarks.length < MAX_MARKS; i = hay.indexOf(needle, i + needle.length)) {
+    const mark = document.createElement('mark')
+    mark.textContent = logText.slice(i, i + needle.length)
+    frag.append(logText.slice(at, i), mark)
+    logMarks.push(mark)
+    at = i + needle.length
+  }
+  frag.append(logText.slice(at))
+  view.replaceChildren(frag)
+  logIndex = -1
+  jumpLog(fromEnd ? logMarks.length - 1 : 0)
+}
+
+function jumpLog(index: number): void {
+  const count = $('log-count')
+  if (!logMarks.length) {
+    count.textContent = tr('log.noMatch')
+    return
+  }
+  logMarks[logIndex]?.classList.remove('current')
+  logIndex = (index + logMarks.length) % logMarks.length
+  const mark = logMarks[logIndex]
+  mark.classList.add('current')
+  mark.scrollIntoView({ block: 'center' })
+  count.textContent = `${logIndex + 1} / ${logMarks.length}${logMarks.length >= MAX_MARKS ? '+' : ''}`
+}
+
+function setupLog(): void {
+  $('problems-tab').addEventListener('click', () => showLog(false))
+  $('log-tab').addEventListener('click', () => showLog(true))
+  const search = $<HTMLInputElement>('log-search')
+  search.addEventListener('input', () => paintLog(true))
+  search.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter') return
+    e.preventDefault()
+    jumpLog(logIndex + (e.shiftKey ? -1 : 1))
+  })
 }
 
 // ---------- SyncTeX ----------
@@ -1194,7 +1302,8 @@ async function afterReplace(paths: string[]): Promise<void> {
   updateDirty()
   if (!editor.path) return
   if (autoBuild) await saveText()
-  sumi.requestBuild(editor.path)
+  const target = buildTarget()
+  if (target) sumi.requestBuild(target)
 }
 
 // ---------- メニューと外部の変更 ----------
@@ -1223,6 +1332,8 @@ function handleMenu(command: string): void {
     case 'reveal':
       if (editor.path ?? folder) sumi.revealPath((editor.path ?? folder) as string)
       return
+    case 'clean':
+      return void cleanAux()
     case 'forward-sync':
       return void forwardSync()
     case 'open-pdf':
@@ -1263,6 +1374,15 @@ function handleMenu(command: string): void {
       return pdfBar.openFind()
   }
   sumi.saveSettings({ zoom: preview.zoom })
+}
+
+async function cleanAux(): Promise<void> {
+  const target = buildTarget()
+  if (!target) return
+  await saveText()
+  const ok = await sumi.cleanBuild(target)
+  if (ok === null) setStatus('error', 'status.noRoot')
+  else setStatus('idle', ok ? 'status.cleaned' : 'status.cleanFailed')
 }
 
 async function onFolderOpened(next: string, file: string | null): Promise<void> {
@@ -1327,9 +1447,15 @@ function applySettings(next: Settings): void {
   $<HTMLInputElement>('auto').checked = next.auto
   $<HTMLInputElement>('settings-auto').checked = next.auto
   $<HTMLInputElement>('settings-ai').checked = next.aiEnabled
+  $<HTMLInputElement>('settings-shell-escape').checked = next.shellEscape
+  // 処理系や shell-escape を替えたら、今の書類をすぐ組み直して結果を見せる
+  if (prev && (prev.engine !== next.engine || prev.shellEscape !== next.shellEscape)) {
+    const target = buildTarget()
+    if (target) sumi.requestBuild(target)
+  }
   document.body.classList.toggle('ai-off', !next.aiEnabled)
   for (const group of document.querySelectorAll<HTMLElement>('[data-setting]')) {
-    const value = next[group.dataset.setting as 'language' | 'theme' | 'palette' | 'pdfView']
+    const value = next[group.dataset.setting as 'language' | 'theme' | 'palette' | 'pdfView' | 'engine']
     for (const button of group.querySelectorAll<HTMLButtonElement>('button')) {
       button.setAttribute('aria-pressed', String(button.dataset.value === value))
     }
@@ -1389,6 +1515,7 @@ function setupSettings(): void {
     }
   }
   $<HTMLInputElement>('settings-ai').addEventListener('change', (e) => sumi.updateSettings({ aiEnabled: (e.target as HTMLInputElement).checked }))
+  $<HTMLInputElement>('settings-shell-escape').addEventListener('change', (e) => sumi.updateSettings({ shellEscape: (e.target as HTMLInputElement).checked }))
   for (const id of ['auto', 'settings-auto']) {
     $<HTMLInputElement>(id).addEventListener('change', (e) => sumi.updateSettings({ auto: (e.target as HTMLInputElement).checked }))
   }
@@ -1413,12 +1540,15 @@ async function init(): Promise<void> {
   $('toggle-sidebar').addEventListener('click', toggleSidebar)
   $('problems-close').addEventListener('click', () => ($('problems').hidden = true))
   $('status').addEventListener('click', () => ($('problems').hidden = !$('problems').hidden))
+  $('build-stop').addEventListener('click', () => sumi.cancelBuild())
+  setupLog()
 
   sumi.onMenu(handleMenu)
   sumi.onFolderOpened((f, file) => void onFolderOpened(f, file))
   sumi.onFileChanged((p, c, source) => void onFileChanged(p, c, source))
   sumi.onBuildStarted(onBuildStarted)
   sumi.onBuildFinished((r, f, err) => void onBuildFinished(r, f, err))
+  sumi.onBuildCancelled(onBuildCancelled)
 
   // 閉じる前の保存は main が close と before-quit で聞きに来る。ここは開発中の再読み込みなどへの備え
   window.addEventListener('beforeunload', () => void saveText())

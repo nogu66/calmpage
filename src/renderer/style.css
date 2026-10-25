@@ -1444,6 +1444,119 @@ button.agent-row-main:hover,
   word-break: break-word;
 }
 
+/* ---------- 班 2: コンパイル（ログ・中止・設定） ---------- */
+
+.panel-tabs {
+  display: flex;
+  gap: 14px;
+}
+
+.panel-tab {
+  border: none;
+  background: none;
+  padding: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.panel-tab[aria-pressed='true'] {
+  color: var(--text);
+}
+
+.panel-tools {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 400;
+}
+
+#log-count {
+  color: var(--muted);
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+#log-search {
+  width: 180px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--card);
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+  padding: 3px 7px;
+  outline: none;
+}
+
+#log-search:focus {
+  border-color: var(--faint);
+}
+
+#log-search[hidden],
+#log-count[hidden] {
+  display: none;
+}
+
+#problems.log-mode {
+  height: 45%;
+  max-height: none;
+}
+
+#log-view {
+  flex: 1;
+  min-height: 0;
+  margin: 0;
+  padding: 2px 20px 12px;
+  overflow: auto;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: var(--text);
+  user-select: text;
+}
+
+#log-view[hidden] {
+  display: none;
+}
+
+#log-view mark {
+  background: var(--selection);
+  color: inherit;
+}
+
+#log-view mark.current {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+.status-stop {
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  padding: 4px 2px;
+  font-size: 12px;
+}
+
+.status-stop:hover {
+  color: var(--text);
+}
+
+.status-stop[hidden] {
+  display: none;
+}
+
+.setting-row.stacked {
+  flex-wrap: wrap;
+  gap: 8px 16px;
+}
+
+.setting-row.stacked > div:first-child {
+  flex-basis: 100%;
+}
+
 /* ---------- PDF（ページは紙の色のまま） ---------- */
 
 #preview-col {

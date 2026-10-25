@@ -5,6 +5,8 @@ import { _electron as electron } from 'playwright-core'
 import { appendFileSync, cpSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
+import { spawnSync } from 'node:child_process'
+import { existsSync, rmSync } from 'node:fs'
 
 const folder = process.argv[2] ? resolve(process.argv[2]) : join(mkdtempSync(join(tmpdir(), 'calmpage-sample-')), 'sample')
 if (!process.argv[2]) cpSync(resolve('examples/sample'), folder, { recursive: true })
@@ -1085,6 +1087,164 @@ check(
   `${reopenedTabs.map((p) => p.slice(folder.length + 1)).join(', ')}`
 )
 await page.screenshot({ path: join(shots, '11-tabs.png') })
+
+
+// ---------- 班 2: コンパイル ----------
+{
+  const fileItem = (p) => page.locator(`#file-list li[data-path="${p}"]`)
+  const statusText = () => page.locator('#status-text').textContent()
+  const problemTexts = () => page.locator('#problem-list li').allTextContents()
+  // 組み始めを待ってから終わりを待つ（始まりを見逃しても、終わった状態なら先へ進む）
+  const built = async () => {
+    await page.waitForFunction(() => document.querySelector('#status').dataset.state === 'building', null, { timeout: 8000 }).catch(() => {})
+    return waitStatus(['ok', 'warning', 'error'])
+  }
+  const openAndBuild = async (p) => {
+    await fileItem(p).waitFor({ timeout: 8000 })
+    await waitStatus(['ok', 'warning', 'error', 'idle'])
+    await fileItem(p).click()
+    return built()
+  }
+  const engine = () => page.locator('#engine').textContent()
+  const made = []
+  const write = (name, text) => {
+    const p = join(folder, name)
+    writeFileSync(p, text)
+    made.push(p)
+    return p
+  }
+
+  // .bib: BibTeX の警告が「問題」に出て、未定義の引用はソースの行に結び付く。.bib を保存すると同じ本体を組み直す
+  const bib = write('smoke-refs.bib', '@book{knuth,\n  author = {Donald Knuth},\n  title = {The TeXbook},\n  year = {1984}\n}\n')
+  const bibDoc = write('smoke-bib.tex', '\\documentclass{article}\n\\begin{document}\nSee \\cite{knuth} and \\cite{smokemissing}.\n\\bibliographystyle{plain}\n\\bibliography{smoke-refs}\n\\end{document}\n')
+  await openAndBuild(bibDoc)
+  let texts = await problemTexts()
+  check(
+    'BibTeX の警告と未定義の引用',
+    texts.some((t) => /\[BibTeX\] empty publisher in knuth/.test(t)) && texts.some((t) => t.startsWith('smoke-bib.tex:3') && /smokemissing/.test(t)) && !texts.some((t) => /database entry/.test(t)),
+    texts.join(' | ')
+  )
+  await fileItem(bib).click()
+  await page.waitForTimeout(400)
+  const openedQuietly = (await status()) !== 'building'
+  await page.locator('.cm-content').click()
+  await page.keyboard.press('Meta+ArrowDown')
+  await page.keyboard.type(' @misc{smokemissing, title = {Missing}, year = {2020}}')
+  await built()
+  texts = await problemTexts()
+  const rootMark = await page.locator('#file-list li.root').getAttribute('data-path')
+  check(
+    '.bib を保存して組み直す',
+    openedQuietly && rootMark === bibDoc && !texts.some((t) => /Citation .smokemissing/.test(t)) && /smokemissing/.test(readFileSync(bib, 'utf8')),
+    `開いたとき組まない: ${openedQuietly} / 本体 ${rootMark} / ${(await statusText())} / ${texts.join(' | ')}`
+  )
+
+  // 中止: 終わらない書類を組み、ボタンと ⌘. で止める。latexmk の子（pdflatex）まで止まり、溜まった依頼も捨てる
+  const slow = write('smoke-slow.tex', '\\documentclass{article}\n\\begin{document}\n\\def\\x{\\x}\\x\n\\end{document}\n')
+  const running = () => spawnSync('pgrep', ['-f', 'smoke-slow']).stdout.toString().trim()
+  await fileItem(slow).waitFor({ timeout: 8000 })
+  await fileItem(slow).click()
+  await page.waitForFunction(() => document.querySelector('#status').dataset.state === 'building', null, { timeout: 8000 }).catch(() => {})
+  const stopShown = await page.locator('#build-stop').waitFor({ state: 'visible', timeout: 5000 }).then(() => true).catch(() => false)
+  const beforeStop = running()
+  await page.locator('#build-stop').click()
+  const stoppedByButton = await page.waitForFunction(() => document.querySelector('#status-text').textContent === '中止しました', null, { timeout: 8000 }).then(() => true).catch(() => false)
+  await page.waitForTimeout(500)
+  const afterButton = running()
+  await clickMenu('コンパイル')
+  await page.waitForFunction(() => document.querySelector('#status').dataset.state === 'building', null, { timeout: 8000 }).catch(() => {})
+  await page.waitForTimeout(800)
+  await clickMenu('コンパイル') // 実行中の依頼は待ち行列に入る。中止したら一緒に捨てる
+  await clickMenu('コンパイルを中止')
+  const stoppedByMenu = await page.waitForFunction(() => document.querySelector('#status-text').textContent === '中止しました', null, { timeout: 8000 }).then(() => true).catch(() => false)
+  await page.waitForTimeout(1500)
+  const afterMenu = running()
+  const stillStopped = (await status()) === 'idle' && !(await page.locator('#build-stop').isVisible())
+  check(
+    'コンパイルの中止',
+    stopShown && beforeStop !== '' && stoppedByButton && afterButton === '' && stoppedByMenu && afterMenu === '' && stillStopped,
+    JSON.stringify({ stopShown, beforeStop: beforeStop.split('\n').length, stoppedByButton, afterButton, stoppedByMenu, afterMenu, stillStopped })
+  )
+
+  // 中間ファイルを消す: 出力先の .aux などが消え、PDF と SyncTeX は残る
+  await openAndBuild(filePath)
+  const cache = join(userData, 'build', readdirSync(join(userData, 'build')).find((d) => d.startsWith(`${base}-`)))
+  const beforeClean = readdirSync(cache)
+  await clickMenu('中間ファイルを消す')
+  const cleaned = await page.waitForFunction(() => document.querySelector('#status-text').textContent === '中間ファイルを消しました', null, { timeout: 30_000 }).then(() => true).catch(() => false)
+  const afterClean = readdirSync(cache)
+  check(
+    '中間ファイルを消す',
+    cleaned && beforeClean.includes(`${base}.aux`) && !afterClean.some((f) => /\.(aux|log|fls|fdb_latexmk)$/.test(f)) && afterClean.includes(`${base}.pdf`) && afterClean.includes(`${base}.synctex.gz`),
+    `${beforeClean.join(',')} → ${afterClean.join(',')}`
+  )
+
+  // % !TEX program と % !TEX TS-program
+  const magic = write('smoke-magic.tex', '% !TEX program = xelatex\n\\documentclass{article}\n\\begin{document}\nMagic.\n\\end{document}\n')
+  await openAndBuild(magic)
+  const xe = await engine()
+  writeFileSync(magic, '% !TEX TS-program = lualatex\n\\documentclass{article}\n\\begin{document}\nMagic.\n\\end{document}\n')
+  await built()
+  const lua = await engine()
+  check('% !TEX program で処理系を選ぶ', xe === 'XeLaTeX' && lua === 'LuaLaTeX', `${xe} → ${lua}`)
+
+  // 設定の既定の処理系: 替えるとすぐ組み直す
+  const plain = write('smoke-plain.tex', '\\documentclass{article}\n\\begin{document}\nPlain.\n\\end{document}\n')
+  await openAndBuild(plain)
+  const auto = await engine()
+  await page.locator('#open-settings').click()
+  await page.locator('[data-setting="engine"] button[data-value="lualatex"]').click()
+  await built()
+  await page.screenshot({ path: join(shots, '11-compile-settings.png') })
+  const chosen = await engine()
+  await page.locator('[data-setting="engine"] button[data-value="auto"]').click()
+  await built()
+  const back = await engine()
+  check('既定の処理系の設定', auto === 'pdfLaTeX' && chosen === 'LuaLaTeX' && back === 'pdfLaTeX', `${auto} → ${chosen} → ${back}`)
+
+  // shell-escape: 既定は切。入れると \write18 が動く
+  const ran = join(folder, 'smoke-shell-ran')
+  made.push(ran)
+  const shell = write('smoke-shell.tex', '\\documentclass{article}\n\\begin{document}\n\\immediate\\write18{touch smoke-shell-ran}Shell.\n\\end{document}\n')
+  await page.keyboard.press('Escape')
+  await openAndBuild(shell)
+  const offRan = existsSync(ran)
+  await page.locator('#open-settings').click()
+  const hint = await page.locator('#settings-shell-escape').locator('xpath=..').locator('.setting-hint').textContent()
+  await page.locator('#settings-shell-escape').click()
+  await built()
+  const onRan = existsSync(ran)
+  await page.locator('#settings-shell-escape').click()
+  await built()
+  await page.keyboard.press('Escape')
+  check('shell-escape の設定', !offRan && onRan && /信頼/.test(hint), `切: ${offRan} / 入: ${onRan} / ${hint}`)
+
+  // 生のログ: 末尾から見せ、検索できる
+  await page.locator('#problems').evaluate((el) => (el.hidden = false))
+  await page.locator('#log-tab').click()
+  await page.waitForFunction(() => /latexmk/.test(document.querySelector('#log-view').textContent), null, { timeout: 5000 }).catch(() => {})
+  const log = await page.evaluate(() => {
+    const v = document.querySelector('#log-view')
+    return { text: v.textContent, atEnd: v.scrollTop + v.clientHeight >= v.scrollHeight - 4, visible: !v.hidden, list: !document.querySelector('#problem-list').hidden }
+  })
+  await page.locator('#log-search').fill('Latexmk:')
+  await page.waitForTimeout(200)
+  const found = { count: await page.locator('#log-count').textContent(), marks: await page.locator('#log-view mark').count(), current: await page.locator('#log-view mark.current').count() }
+  await page.screenshot({ path: join(shots, '10-log.png') })
+  await page.locator('#log-search').fill('')
+  await page.locator('#problems-tab').click()
+  const listBack = await page.locator('#problem-list').isVisible()
+  await page.locator('#problems-close').click()
+  check(
+    'ログの表示と検索',
+    log.visible && !log.list && log.atEnd && /──── smoke-shell\.log ────/.test(log.text) && /This is pdfTeX/.test(log.text) && /──── latexmk ────/.test(log.text) && /^\d+ \/ \d+$/.test(found.count) && found.marks > 0 && found.current === 1 && listBack,
+    JSON.stringify({ ...found, atEnd: log.atEnd, length: log.text.length })
+  )
+
+  for (const p of made) rmSync(p, { force: true })
+  await fileItem(filePath).click()
+  await built()
+}
 
 check('コンソールにエラーなし', errors.length === 0, errors.slice(0, 3).join(' | '))
 await page.screenshot({ path: join(shots, '4-final.png') })

@@ -27,6 +27,7 @@
         </label>
         <span id="engine"></span>
         <button id="status" class="status-pill" data-state="idle"><i></i><span id="status-text"></span></button>
+        <button id="build-stop" class="status-stop" data-i18n="status.stop" data-i18n-title="status.stopHint" hidden></button>
         <button id="toggle-preview" class="icon-button" aria-pressed="true" data-i18n-title="preview.toggle" data-i18n-aria="preview.toggle">
           <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
             <rect width="18" height="18" x="3" y="3" rx="2" /><path d="M15 3v18" />
@@ -58,8 +59,19 @@
         <div id="tabs"></div>
         <div id="editor"></div>
         <section id="problems" hidden>
-          <header><span id="problems-title"></span><button id="problems-close" data-i18n-title="problems.close" data-i18n-aria="problems.close">×</button></header>
+          <header>
+            <div class="panel-tabs">
+              <button id="problems-tab" class="panel-tab" aria-pressed="true"><span id="problems-title"></span></button>
+              <button id="log-tab" class="panel-tab" aria-pressed="false" data-i18n="log.title"></button>
+            </div>
+            <div class="panel-tools">
+              <span id="log-count" hidden></span>
+              <input id="log-search" type="search" data-i18n-placeholder="log.search" hidden />
+              <button id="problems-close" data-i18n-title="problems.close" data-i18n-aria="problems.close">×</button>
+            </div>
+          </header>
           <ul id="problem-list"></ul>
+          <pre id="log-view" hidden></pre>
         </section>
       </section>
 
@@ -163,6 +175,28 @@
             <p class="setting-hint" data-i18n="settings.aiEnabledHint"></p>
           </div>
           <input type="checkbox" id="settings-ai" class="switch" />
+        </div>
+
+        <h3 data-i18n="settings.compile"></h3>
+        <div class="setting-row stacked">
+          <div>
+            <span data-i18n="settings.engine"></span>
+            <p class="setting-hint" data-i18n="settings.engineHint"></p>
+          </div>
+          <div class="segmented" data-setting="engine">
+            <button data-value="auto" data-i18n="engine.auto"></button>
+            <button data-value="pdflatex">pdfLaTeX</button>
+            <button data-value="xelatex">XeLaTeX</button>
+            <button data-value="lualatex">LuaLaTeX</button>
+            <button data-value="uplatex">upLaTeX</button>
+          </div>
+        </div>
+        <div class="setting-row">
+          <div>
+            <label for="settings-shell-escape" data-i18n="settings.shellEscape"></label>
+            <p class="setting-hint" data-i18n="settings.shellEscapeHint"></p>
+          </div>
+          <input type="checkbox" id="settings-shell-escape" class="switch" />
         </div>
 
         <div id="settings-agents">

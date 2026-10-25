@@ -3,7 +3,7 @@ import { copyFileSync, existsSync, mkdirSync, statSync } from 'node:fs'
 import { readFile, writeFile } from 'node:fs/promises'
 import { basename, dirname, join, sep } from 'node:path'
 import { AcpAgents } from './acp'
-import { backwardSync, build, forwardSync, resolveRoot, type BuildResult } from './build'
+import { backwardSync, build, clean, forwardSync, resolveRoot, type BuildResult } from './build'
 import { createFile, createFolder, FolderWatcher, importData, importFile, listProjectEntries, listProjectFiles, renamePath } from './files'
 import { isEmptyFolder, TEMPLATE_IDS, writeTemplate, type TemplateId } from './templates'
 import { listVersions, readVersion, recordVersion } from './history'
@@ -157,6 +157,7 @@ function recentItems(tr: (key: Key) => string): Electron.MenuItemConstructorOpti
 
 function setFolder(next: string): void {
   if (next !== folder) stopAgents() // AI は開いているフォルダで動くので、替えたら止める
+  if (next !== folder) cancelBuild()
   folder = next
   watcher.watch(next)
   saveSettings({ folder: next })
@@ -164,8 +165,10 @@ function setFolder(next: string): void {
 }
 
 // 組版は 1 本ずつ。実行中に来た依頼は最後の 1 件だけ覚えておき、終わったら続けて組む。
+// 中間ファイルの削除もこの順番待ちに入れる（組んでいる最中に消さないように）。
 let building = false
 let queued: string | null = null
+let stopper: AbortController | null = null
 
 async function requestBuild(file: string): Promise<void> {
   if (building) {
@@ -173,9 +176,11 @@ async function requestBuild(file: string): Promise<void> {
     return
   }
   building = true
+  const stop = (stopper = new AbortController())
   try {
     const files = folder ? await listProjectFiles(folder) : []
     const root = await resolveRoot(file, currentRoot, files)
+    if (stop.signal.aborted) return void send('build:cancelled')
     if (!root) {
       currentPdf = null
       send('build:finished', null, file)
@@ -184,19 +189,45 @@ async function requestBuild(file: string): Promise<void> {
     // 別の書類に移ったら、前の書類の PDF を ⇧⌘O や SyncTeX の相手にしない
     if (root !== currentRoot) currentPdf = null
     send('build:started', root)
-    const result: BuildResult = await build(root)
+    const result: BuildResult = await build(root, stop.signal)
     currentRoot = root
+    if (result.cancelled) return void send('build:cancelled')
     if (result.pdf) currentPdf = result.pdf
     send('build:finished', result, file)
   } catch (err) {
     send('build:finished', null, file, String(err))
   } finally {
-    building = false
-    if (queued) {
-      const next = queued
-      queued = null
-      void requestBuild(next)
-    }
+    release()
+  }
+}
+
+function release(): void {
+  building = false
+  stopper = null
+  if (queued) {
+    const next = queued
+    queued = null
+    void requestBuild(next)
+  }
+}
+
+// 中止したら待ち行列も捨てる（止めた直後に、溜まっていた依頼で組み直さないように）
+function cancelBuild(): void {
+  queued = null
+  stopper?.abort()
+}
+
+async function cleanAux(file: string): Promise<boolean | null> {
+  cancelBuild()
+  while (building) await new Promise((r) => setTimeout(r, 50))
+  building = true
+  try {
+    const root = await resolveRoot(file, currentRoot, folder ? await listProjectFiles(folder) : [])
+    return root ? await clean(root) : null
+  } catch {
+    return false
+  } finally {
+    release()
   }
 }
 
@@ -296,6 +327,8 @@ function buildMenu(): void {
           { type: 'separator' },
           { label: tr('menu.saveCompile'), accelerator: 'CmdOrCtrl+S', click: command('save') },
           { label: tr('menu.compile'), accelerator: 'CmdOrCtrl+R', click: command('build') },
+          { label: tr('menu.cancelCompile'), accelerator: 'CmdOrCtrl+.', click: () => cancelBuild() },
+          { label: tr('menu.cleanAux'), click: command('clean') },
           { type: 'separator' },
           { label: tr('menu.rename'), click: command('rename') },
           { label: tr('menu.trash'), click: command('trash') },
@@ -454,6 +487,8 @@ function registerIpc(): void {
   })
   registerSearchAndHistory()
   ipcMain.on('build:request', (_e, file: string) => void requestBuild(file))
+  ipcMain.on('build:cancel', () => cancelBuild())
+  ipcMain.handle('build:clean', (_e, file: string) => cleanAux(file))
   ipcMain.handle('pdf:read', (_e, path: string) => readFile(path))
   ipcMain.handle('pdf:open-external', () => (currentPdf ? shell.openPath(currentPdf) : null))
   ipcMain.handle('sync:forward', (_e, file: string, line: number, column: number) =>
@@ -499,7 +534,7 @@ function registerIpc(): void {
 let released = false
 let releasing = false
 
-async function release(then: () => void): Promise<void> {
+async function releaseWindow(then: () => void): Promise<void> {
   if (releasing) return
   releasing = true
   try {
@@ -567,7 +602,7 @@ function createWindow(): void {
   win.on('close', (e) => {
     if (released) return
     e.preventDefault()
-    void release(() => win?.close())
+    void releaseWindow(() => win?.close())
   })
   win.on('closed', () => (win = null))
   // ファイルを窓に落としたとき、その場所へ移ってしまわないように
@@ -600,11 +635,12 @@ app.whenReady().then(() => {
 app.on('before-quit', (e) => {
   if (released || !win) return
   e.preventDefault()
-  void release(() => app.quit())
+  void releaseWindow(() => app.quit())
 })
 
 app.on('window-all-closed', () => {
   watcher.close()
+  cancelBuild() // latexmk は detached で動くので、窓と一緒には止まらない
   stopAgents()
   app.quit()
 })

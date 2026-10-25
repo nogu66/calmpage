@@ -44,11 +44,14 @@ Calmpage is a LaTeX editor that stays out of your way. The name says what it aim
 
 - Editor and PDF side by side, with flicker-free recompiles that keep your scroll position
 - *Auto compile*: save and compile 1.2 seconds after you stop typing
-- Errors in the editor and in a Problems list
+- Errors in the editor and in a Problems list, including BibTeX and Biber messages linked to the `.bib` line
+- The raw log (the `.log` and the `latexmk` output) next to the Problems list, shown from the end and searchable
+- Stop a long compile with ⌘., and remove auxiliary files from the File menu
 - SyncTeX both ways: ⌘J shows the cursor in the PDF, ⌘-click in the PDF jumps to the source
 - A PDF viewer that works like one: clickable links (contents, `\ref`, `\cite`, URLs), text you can select and copy, search inside the PDF, page numbers, and fit width / whole page / two pages side by side
 - Optional dark pages: invert the PDF in dark mode (off by default)
-- Multi-file projects with `% !TEX root`, `.latexmkrc`, and automatic engine selection
+- Multi-file projects with `% !TEX root`, `% !TEX program`, `.latexmkrc`, and automatic engine selection
+- Saving a `.bib`, `.sty`, or `.cls` file recompiles the document that uses it
 - Reloads and recompiles when another editor or an agent changes a file
 - Never loses your work: unsaved changes are written before you quit, close the window, or switch folders. If saving fails, or *Auto compile* is off, you get the usual Save / Don't Save / Cancel
 - Manage files from the file list (right-click) or the File menu: new file, new folder, rename, move to trash, show in Finder
@@ -110,10 +113,12 @@ Open a folder (or a single `.tex` file) with ⌘O. Calmpage finds the root docum
 | Rename, move to trash, show in Finder | Right-click in the file list |
 | Save and compile | ⌘S (automatic with *Auto compile*) |
 | Compile | ⌘R |
+| Stop compiling | ⌘., or *Stop* next to the status during a long compile |
+| Remove auxiliary files | File → Remove Auxiliary Files |
 | Show the cursor position in the PDF | ⌘J |
 | Jump from the PDF to the source | ⌘-click in the PDF |
 | File list | ⌘B, or the button at the left of the title bar |
-| Problems | ⇧⌘M |
+| Problems and the raw log | ⇧⌘M, then *Log* to switch |
 | Find and replace in the folder | ⇧⌘F |
 | Close the tab (saves first) | ⌘W, × or a middle click on the tab |
 | Next / previous tab | ⌃Tab / ⌃⇧Tab, or ⇧⌘] / ⇧⌘[ |
@@ -129,9 +134,16 @@ Open a folder (or a single `.tex` file) with ⌘O. Calmpage finds the root docum
 
 ### How Calmpage compiles
 
-- **Root document.** `% !TEX root = …` wins. Otherwise a file with `\documentclass` is its own root. Otherwise Calmpage uses the root that last included the file, or searches for a document that `\input`s it.
+- **Root document.** `% !TEX root = …` wins. Otherwise a file with `\documentclass` is its own root. Otherwise Calmpage uses the root that last read the file (including `.bib` files read by BibTeX or Biber), or searches for a document that `\input`s it (or `\bibliography`, `\addbibresource`, `\usepackage`, `\documentclass` for `.bib`, `.sty`, and `.cls` files). A `.bib`, `.sty`, or `.cls` file that no document claims is compiled with the current root.
+- **Engine.** The first of these wins:
+  1. `% !TEX program = xelatex` (or TeXShop’s `% !TEX TS-program = xelatex`) near the top of the root document. `pdflatex`, `xelatex`, `lualatex`, `uplatex`, and `platex` are understood. It comes first because it is written in the document itself, and it overrides the engine in `.latexmkrc` (the rest of `.latexmkrc` still applies).
+  2. `.latexmkrc` in the folder.
+  3. *Settings → Default engine*, when it is not *Auto*.
+  4. Automatic: LuaLaTeX for `ltjs*` classes, `luatexja`, or Japanese text; upLaTeX for `js*` classes; XeLaTeX for `fontspec`; pdfLaTeX otherwise.
 - **With `.latexmkrc`**, the folder is compiled exactly as configured (engine, output directory, `TEXINPUTS`).
-- **Without one**, Calmpage picks the engine: LuaLaTeX for `ltjs*` classes, `luatexja`, or Japanese text; upLaTeX for `js*` classes; XeLaTeX for `fontspec`; pdfLaTeX otherwise. Intermediate files go to `~/Library/Application Support/Calmpage/build/`, so your folder stays clean.
+- **Without one**, intermediate files go to `~/Library/Application Support/Calmpage/build/`, so your folder stays clean.
+- **Shell escape** is off by default. Turn it on in *Settings → Allow shell escape* only for documents you trust, because it lets a document run any program. `minted` 3 works without it (TeX Live allows its helper in restricted mode) and keeps its `_minted` cache with the intermediate files.
+- **Remove Auxiliary Files** runs `latexmk -c` with the same output directory and engine as a compile (so `.latexmkrc` is honored). The PDF and SyncTeX data stay, `.bbl` is removed only when its `.bib` exists, and the `minted` cache in Calmpage’s own build folder is removed too.
 
 ## AI panel
 
@@ -163,7 +175,7 @@ No. Turn off **Settings → AI panel** and Calmpage is a plain editor with a PDF
 Not yet. Calmpage is built with Electron, so ports are possible, but only macOS is tested today.
 
 **Which TeX engines are supported?**
-Whatever `latexmk` can run: pdfLaTeX, XeLaTeX, LuaLaTeX, upLaTeX, and others through `.latexmkrc`.
+Whatever `latexmk` can run: pdfLaTeX, XeLaTeX, LuaLaTeX, upLaTeX, pLaTeX, and others through `.latexmkrc`.
 
 ## Contributing
 

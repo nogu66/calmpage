@@ -18,17 +18,25 @@ All notable changes to Calmpage are listed here. The format follows [Keep a Chan
 - Drop an image on the editor to copy it into the project (into `figures/` or an existing image folder) and insert a `figure` environment with `\includegraphics`, `\caption`, and `\label`. Drop files on the file list to copy them into a folder.
 - New Document… (⇧⌘N) puts a template into an empty folder and opens it: paper (article), Japanese paper (ltjsarticle with LuaLaTeX, or jsarticle with upLaTeX), beamer slides, report, or letter. Papers and reports come with a `.bib` file.
 - File → Open Recent lists recently opened folders. They also appear in macOS's recent items.
+- Find and replace across the folder in the sidebar (⇧⌘F, or Edit → Find in Folder), with match case, whole word, and regular expressions. Results are grouped by file; Replace All asks first, changes open files in the editor, and writes the others to disk.
+- Editor tabs for the files you open. A dot marks unsaved changes and an underline marks the root document. Close a tab with ×, ⌘W, or a middle click (unsaved changes are saved first), and move between tabs with ⌃Tab / ⌃⇧Tab or ⇧⌘[ / ⇧⌘]. The tabs come back the next time you open the folder.
+- Local file history: every save keeps a version of the file in `~/Library/Application Support/Calmpage/history/` (up to 50 per file, for 30 days, without duplicates). File → File History… lists the versions, shows a diff against the current text, and restores one.
+- Saving a `.bib`, `.sty`, or `.cls` file recompiles the document that uses it (found from latexmk’s records, `\bibliography` / `\addbibresource` / `\usepackage`, or the current root).
+- Stop a compile with File → Stop Compiling (⌘.) or *Stop* next to the status. The whole `latexmk` process group is stopped and pending compiles are dropped.
+- File → Remove Auxiliary Files runs `latexmk -c` with the same options as a compile, keeping the PDF and SyncTeX data.
+- `% !TEX program = …` and `% !TEX TS-program = …` choose the engine (pdfLaTeX, XeLaTeX, LuaLaTeX, upLaTeX, pLaTeX), ahead of `.latexmkrc`. A *Default engine* setting is used when neither is present.
+- An *Allow shell escape* setting (off by default) passes `-shell-escape` to `latexmk`.
+- A *Log* view next to the Problems list shows the `.log` and the `latexmk` output from the end, with search.
+- BibTeX and Biber warnings and errors appear in the Problems list, linked to the line in the `.bib` file.
 
 ### Fixed
 
 - upLaTeX documents failed to compile, because `latexmk` does not accept `-bibtex=upbibtex`. upbibtex is now set with `-e`.
+- Warnings from files read with `\input` (such as undefined references) pointed at the root document instead of the file that caused them.
 
 ### Changed
 
 - New app icon: a half moon rising from the horizon on a sheet of paper, with its reflection drawn as lines of text.
-- Find and replace across the folder in the sidebar (⇧⌘F, or Edit → Find in Folder), with match case, whole word, and regular expressions. Results are grouped by file; Replace All asks first, changes open files in the editor, and writes the others to disk.
-- Editor tabs for the files you open. A dot marks unsaved changes and an underline marks the root document. Close a tab with ×, ⌘W, or a middle click (unsaved changes are saved first), and move between tabs with ⌃Tab / ⌃⇧Tab or ⇧⌘[ / ⇧⌘]. The tabs come back the next time you open the folder.
-- Local file history: every save keeps a version of the file in `~/Library/Application Support/Calmpage/history/` (up to 50 per file, for 30 days, without duplicates). File → File History… lists the versions, shows a diff against the current text, and restores one.
 
 ## 0.3.0 - 2026-10-23
 
