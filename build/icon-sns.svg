@@ -2,10 +2,16 @@
   <!-- SNS 用。角丸を外した正方形で、丸い切り抜きはサービス側に任せる -->
   <defs>
     <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fdfdfc"/><stop offset="1" stop-color="#efefeb"/></linearGradient>
-    <linearGradient id="ink" x1="0" y1="0" x2="0.35" y2="1"><stop offset="0" stop-color="#4a4a4a"/><stop offset="1" stop-color="#0c0c0c"/></linearGradient>
+    <linearGradient id="ink" x1="0" y1="0" x2="0.35" y2="1"><stop offset="0" stop-color="#3a3a3a"/><stop offset="1" stop-color="#111"/></linearGradient>
   </defs>
   <rect x="100" y="100" width="824" height="824" fill="url(#bg)"/>
-  <circle cx="512" cy="250.1" r="38.3" fill="url(#ink)"/>
-  <path d="M512 319 L638.2 528.7 A147.2 147.2 0 1 1 385.8 528.7 Z" fill="url(#ink)"/>
-  <path class="shine" d="M415.2 639.9 A103.1 103.1 0 0 1 427.6 545.5" fill="none" stroke="#fff" stroke-opacity="0.28" stroke-width="19.1" stroke-linecap="round"/>
+  <path d="M332 524 A180 180 0 0 1 692 524 Z" fill="url(#ink)"/>
+  <rect x="100" y="518" width="824" height="12" fill="#1a1a1a" fill-opacity="0.55"/>
+  <g fill="#1a1a1a">
+    <rect x="334.5" y="546" width="355" height="16" rx="8" fill-opacity="0.6"/>
+    <rect x="343.8" y="580" width="336.5" height="16" rx="8" fill-opacity="0.45"/>
+    <rect x="361" y="614" width="302" height="16" rx="8" fill-opacity="0.32"/>
+    <rect class="shine" x="389.6" y="648" width="244.8" height="16" rx="8" fill-opacity="0.2"/>
+    <rect class="shine" x="437.8" y="680" width="148.4" height="16" rx="8" fill-opacity="0.12"/>
+  </g>
 </svg>

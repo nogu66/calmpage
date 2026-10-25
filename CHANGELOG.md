@@ -4,6 +4,10 @@ All notable changes to Calmpage are listed here. The format follows [Keep a Chan
 
 ## Unreleased
 
+### Changed
+
+- New app icon: a half moon rising from the horizon on a sheet of paper, with its reflection drawn as lines of text.
+
 ## 0.3.0 - 2026-10-23
 
 ### Changed

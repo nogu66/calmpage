@@ -17,6 +17,8 @@ const render = async (svg, size, path) => {
   const hide = size <= 32 ? '.shine{display:none}' : ''
   await page.setViewportSize({ width: size, height: size })
   await page.setContent(`<style>html,body{margin:0;background:transparent}svg{display:block;width:${size}px;height:${size}px}${hide}</style>${svg}`)
+  // 描き直しを待たずに撮ると、直前の大きいサイズの絵が下のほうに残る
+  await page.evaluate(() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))))
   await page.screenshot({ path, omitBackground: true })
 }
 
