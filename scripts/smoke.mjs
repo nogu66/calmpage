@@ -1481,6 +1481,236 @@ await page.screenshot({ path: join(shots, '11-tabs.png') })
   await page.screenshot({ path: join(shots, '10-editor.png') })
 }
 
+// ---------- 複数ウィンドウ ----------
+{
+  const { basename } = await import('node:path')
+  const folder2 = join(mkdtempSync(join(tmpdir(), 'calmpage-second-')), 'sample')
+  cpSync(resolve('examples/sample'), folder2, { recursive: true })
+  const windowCount = () => app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().length)
+  const frontId = () => app.evaluate(() => globalThis.__calmpageFront())
+  const idOf = async (p) => (await app.browserWindow(p)).evaluate((w) => w.id)
+  // メニューの項目をキーで探して、その窓から押したことにする（言語によらないように）
+  const pressMenu = (accelerator, id) =>
+    app.evaluate(({ Menu, BrowserWindow }, [accelerator, id]) => {
+      const find = (items) => {
+        for (const item of items) {
+          if (item.accelerator === accelerator) return item
+          const sub = item.submenu && find(item.submenu.items)
+          if (sub) return sub
+        }
+      }
+      find(Menu.getApplicationMenu().items)?.click(undefined, BrowserWindow.fromId(id))
+    }, [accelerator, id])
+  const openFromFinder = (path) => app.evaluate(({ app }, path) => app.emit('open-file', { preventDefault() {} }, path), path)
+  const stateOf = (p) => p.evaluate(() => document.querySelector('#status').dataset.state)
+  const settled = async (p) => {
+    await p.waitForFunction(() => document.querySelector('#status').dataset.state === 'building', null, { timeout: 8000 }).catch(() => {})
+    await p.waitForFunction(() => ['ok', 'warning', 'error'].includes(document.querySelector('#status').dataset.state), null, { timeout: 90_000 })
+    return stateOf(p)
+  }
+  // 組版の始まりを記録しておき、ほかの窓の組版が混ざっていないかを確かめる
+  const watchStates = (p) =>
+    p.evaluate(() => {
+      window.__states = []
+      new MutationObserver(() => window.__states.push(document.querySelector('#status').dataset.state)).observe(document.querySelector('#status'), { attributes: true, attributeFilter: ['data-state'] })
+    })
+  const statesOf = (p) => p.evaluate(() => window.__states)
+
+  const id1 = await idOf(page)
+  await settled(page)
+
+  // 1. 新しいウインドウは空で開き、Finder から開いたフォルダはその空の窓に入る
+  const opened = app.waitForEvent('window')
+  await pressMenu('Cmd+Ctrl+N', id1)
+  const page2 = await opened
+  page2.on('console', (m) => m.type() === 'error' && errors.push(`[2] ${m.text()}`))
+  page2.on('pageerror', (e) => errors.push(`[2] ${e}`))
+  await page2.waitForSelector('#status', { timeout: 10_000 })
+  await page2.waitForFunction(() => document.body.classList.contains('empty'), null, { timeout: 10_000 }).catch(() => {})
+  const id2 = await idOf(page2)
+  const emptyAtFirst = await page2.evaluate(() => document.body.classList.contains('empty'))
+  const countAfterNew = await windowCount()
+  const frontAfterNew = await frontId()
+  await openFromFinder(folder2)
+  await page2.waitForFunction((f) => document.querySelector('#ai-folder').title === f, folder2, { timeout: 10_000 }).catch(() => {})
+  const state2 = await settled(page2)
+  await page2.waitForSelector('.page canvas', { timeout: 30_000 }).catch(() => {})
+  const title2 = await (await app.browserWindow(page2)).evaluate((w) => [w.getTitle(), w.getRepresentedFilename()])
+  check(
+    '複数ウィンドウ: 新しいウインドウを開き、別のフォルダで組版する',
+    emptyAtFirst && countAfterNew === 2 && frontAfterNew === id2 && (await windowCount()) === 2 && state2 !== 'error' && (await page2.locator('.page canvas').count()) > 0 && title2[0] === 'sample' && title2[1] === folder2,
+    JSON.stringify({ emptyAtFirst, countAfterNew, frontAfterNew, id2, state2, title2 })
+  )
+
+  // 2. 片方の外部の変更と組版は、もう片方に混ざらない
+  await watchStates(page)
+  appendFileSync(join(folder2, 'main.tex'), '\n% external edit in the second window\n')
+  const external2 = await settled(page2)
+  await page.waitForTimeout(800)
+  const leakedTo1 = await statesOf(page)
+  await watchStates(page2)
+  await pressMenu('CmdOrCtrl+R', id1)
+  const build1 = await settled(page)
+  await page2.waitForTimeout(800)
+  const leakedTo2 = await statesOf(page2)
+  const folder1Shown = await page.locator('#ai-folder').getAttribute('title')
+  check(
+    '複数ウィンドウ: 外部の変更と組版が、ほかの窓に混ざらない',
+    external2 !== 'error' && build1 !== 'error' && leakedTo1.length === 0 && leakedTo2.length === 0 && folder1Shown === folder,
+    JSON.stringify({ external2, build1, leakedTo1, leakedTo2 })
+  )
+
+  // 3. 端末は窓ごとに、その窓のフォルダで動く。出力はその窓にだけ届く
+  await page.evaluate(() => {
+    window.__termData = ''
+    window.sumi.onTermData((tab, data) => tab === 'smoke-mw' && (window.__termData += data))
+  })
+  await page2.evaluate(() => {
+    window.__termData = ''
+    window.sumi.onTermData((tab, data) => tab === 'smoke-mw' && (window.__termData += data))
+  })
+  const termError = await page2.evaluate(() => window.sumi.termStart('smoke-mw', 'shell', 120, 24))
+  await page2.evaluate(() => window.sumi.termInput('smoke-mw', 'pwd\n'))
+  const marker = basename(join(folder2, '..'))
+  const termOk = await page2.waitForFunction((m) => window.__termData.includes(m), marker, { timeout: 8000 }).then(() => true).catch(() => false)
+  const termLeak = await page.evaluate(() => window.__termData)
+  await page2.evaluate(() => window.sumi.termClose('smoke-mw'))
+  check('複数ウィンドウ: 端末はその窓のフォルダで動く', termError === null && termOk && termLeak === '', JSON.stringify({ termError, termOk, termLeak: termLeak.slice(0, 80) }))
+
+  // 4. 全体の設定は、すべての窓へ届く
+  const palette = await page.evaluate(() => document.documentElement.dataset.palette)
+  const other = palette === 'moss' ? 'sand' : 'moss'
+  await page.evaluate((p) => window.sumi.updateSettings({ palette: p }), other)
+  const paletteShared = await page2.waitForFunction((p) => document.documentElement.dataset.palette === p, other, { timeout: 5000 }).then(() => true).catch(() => false)
+  await page.evaluate((p) => window.sumi.updateSettings({ palette: p }), palette)
+  await page2.waitForFunction((p) => document.documentElement.dataset.palette === p, palette, { timeout: 5000 }).catch(() => {})
+  check('複数ウィンドウ: 配色の変更がすべての窓に届く', paletteShared)
+
+  // 5. 同じフォルダを開こうとすると、もう開いている窓が前に出る（Finder からでも ⌘O でも）
+  const frontBefore = await frontId()
+  await openFromFinder(folder)
+  await page.waitForTimeout(500)
+  const frontFinder = await frontId()
+  const countFinder = await windowCount()
+  await app.evaluate(({ dialog }, dir) => {
+    dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [dir] })
+  }, folder2)
+  await pressMenu('CmdOrCtrl+O', id1)
+  await page.waitForTimeout(800)
+  const frontOpen = await frontId()
+  const stillFolder1 = await page.locator('#ai-folder').getAttribute('title')
+  check(
+    '複数ウィンドウ: 同じフォルダを開くと、開いている窓が前に出る',
+    frontBefore === id2 && frontFinder === id1 && countFinder === 2 && frontOpen === id2 && stillFolder1 === folder && (await windowCount()) === 2,
+    JSON.stringify({ frontBefore, frontFinder, countFinder, frontOpen, stillFolder1 })
+  )
+
+  // 6. 復元: 開いている窓が、それぞれのフォルダ・ファイル・タブと位置ごと設定に残る
+  await page2.waitForTimeout(800)
+  const stored = JSON.parse(readFileSync(join(userData, 'settings.json'), 'utf8'))
+  const restored = stored.windows ?? []
+  check(
+    '複数ウィンドウ: 開いている窓を復元の設定に書く',
+    restored.length === 2 &&
+      restored[0].folder === folder &&
+      restored[1].folder === folder2 &&
+      restored[1].file?.startsWith(folder2) &&
+      Array.isArray(restored[1].tabs) &&
+      restored.every((w) => w.bounds?.width > 0) &&
+      stored.folder === folder,
+    JSON.stringify(restored.map((w) => ({ folder: w.folder.slice(-24), file: w.file?.slice(-12), tabs: w.tabs?.length, bounds: !!w.bounds })))
+  )
+
+  // 7. ⌘Q は窓を 1 つずつ確かめ、どれかでキャンセルしたら終わらない。窓を閉じるときは、その窓のことだけを聞く
+  const answers = (list) =>
+    app.evaluate(({ dialog }, list) => {
+      globalThis.__mwAsked = []
+      dialog.showMessageBox = async (win, options) => {
+        globalThis.__mwAsked.push([win?.id, options.message])
+        return { response: list.shift() ?? 2 }
+      }
+    }, list)
+  const asked = () => app.evaluate(() => globalThis.__mwAsked)
+  await page.evaluate(() => window.sumi.updateSettings({ auto: false }))
+  await page2.waitForFunction(() => !document.querySelector('#auto').checked)
+  await page2.locator('.cm-content').click()
+  await page2.keyboard.press('Meta+ArrowDown')
+  await page2.keyboard.type('\n% unsaved in the second window')
+  await page2.waitForTimeout(300)
+  await answers([2])
+  await app.evaluate(({ app }) => app.quit())
+  await page.waitForTimeout(1000)
+  const askedQuit = await asked()
+  const aliveQuit = await windowCount()
+  await answers([1])
+  await (await app.browserWindow(page2)).evaluate((w) => w.close())
+  for (let i = 0; i < 40 && (await windowCount()) > 1; i++) await page.waitForTimeout(100)
+  const askedClose = await asked()
+  await page.evaluate(() => window.sumi.updateSettings({ auto: true }))
+  check(
+    '複数ウィンドウ: ⌘Q は窓ごとに聞き、キャンセルで留まる。閉じるときはその窓だけ',
+    askedQuit.length === 1 && askedQuit[0][0] === id2 && aliveQuit === 2 && askedClose.length === 1 && askedClose[0][0] === id2 && !readFileSync(join(folder2, 'main.tex'), 'utf8').includes('unsaved in the second window'),
+    JSON.stringify({ askedQuit, aliveQuit, askedClose })
+  )
+
+  // 8. 片方を閉じても（7 で閉じた）、もう片方はそのまま動く。閉じた窓は復元の一覧から外れる
+  for (let i = 0; i < 40 && (await windowCount()) > 1; i++) await page.waitForTimeout(100)
+  const countAfterClose = await windowCount()
+  appendFileSync(join(folder2, 'main.tex'), '\n% edit after the second window closed\n')
+  await pressMenu('CmdOrCtrl+R', id1)
+  const afterClose = await settled(page)
+  await page.waitForTimeout(500)
+  const left = JSON.parse(readFileSync(join(userData, 'settings.json'), 'utf8')).windows ?? []
+  check(
+    '複数ウィンドウ: 片方を閉じても、もう片方は動く',
+    countAfterClose === 1 && afterClose !== 'error' && (await frontId()) === id1 && left.length === 1 && left[0].folder === folder,
+    JSON.stringify({ countAfterClose, afterClose, left: left.length })
+  )
+
+  // 9. 起動時の復元: 覚えていた窓を、フォルダ・ファイル・位置ごと開き直す。前の版の folder / file / tabs も 1 つめの窓として読む
+  const launchWith = async (settings) => {
+    const data = mkdtempSync(join(tmpdir(), 'calmpage-restore-'))
+    const agents = JSON.parse(readFileSync(join(userData, 'settings.json'), 'utf8')).agents
+    writeFileSync(join(data, 'settings.json'), JSON.stringify({ agents, ...settings }))
+    const other = await electron.launch({ args: ['.'], env: { ...process.env, CALMPAGE_OPEN: '', CALMPAGE_USER_DATA: data } })
+    return { other, data }
+  }
+  const shownFolders = async (other, n) => {
+    for (let i = 0; i < 100 && other.windows().length < n; i++) await new Promise((r) => setTimeout(r, 100))
+    const pages = other.windows()
+    for (const p of pages) await p.waitForFunction(() => document.querySelector('#ai-folder')?.title && document.querySelector('#file-name')?.textContent, null, { timeout: 15_000 }).catch(() => {})
+    return Promise.all(pages.map(async (p) => [await p.locator('#ai-folder').getAttribute('title'), await p.locator('#file-name').textContent()]))
+  }
+  const bounds = { x: 120, y: 90, width: 1200, height: 800 }
+  {
+    const { other } = await launchWith({
+      windows: [
+        { folder, file: join(folder, 'sections', 'results.tex'), tabs: [join(folder, 'main.tex'), join(folder, 'sections', 'results.tex')] },
+        { folder: folder2, file: join(folder2, 'main.tex'), tabs: [join(folder2, 'main.tex')], bounds }
+      ]
+    })
+    const shown = await shownFolders(other, 2)
+    const restoredBounds = await other.evaluate(({ BrowserWindow }, folder2) => BrowserWindow.getAllWindows().find((w) => w.getRepresentedFilename() === folder2)?.getBounds(), folder2)
+    await other.close()
+    check(
+      '複数ウィンドウ: 起動時に窓を復元する',
+      shown.length === 2 && shown.some(([f, name]) => f === folder && name === 'sections/results.tex') && shown.some(([f, name]) => f === folder2 && name === 'main.tex') && JSON.stringify(restoredBounds) === JSON.stringify(bounds),
+      JSON.stringify({ shown: shown.map(([f, n]) => [f.slice(-24), n]), restoredBounds })
+    )
+  }
+  {
+    const { other, data } = await launchWith({ folder: folder2, file: join(folder2, 'main.tex'), tabs: [join(folder2, 'main.tex')] })
+    const shown = await shownFolders(other, 1)
+    await other.close()
+    const after = JSON.parse(readFileSync(join(data, 'settings.json'), 'utf8'))
+    check(
+      '複数ウィンドウ: 前の版の設定を 1 つめの窓として引き継ぐ',
+      shown.length === 1 && shown[0][0] === folder2 && after.windows?.length === 1 && after.windows[0].folder === folder2,
+      JSON.stringify({ shown: shown.map(([f, n]) => [f.slice(-24), n]), windows: after.windows?.length })
+    )
+  }
+}
+
 check('コンソールにエラーなし', errors.length === 0, errors.slice(0, 3).join(' | '))
 await page.screenshot({ path: join(shots, '4-final.png') })
 await app.close()
