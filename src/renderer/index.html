@@ -45,6 +45,7 @@
       <p class="welcome-title">Calmpage</p>
       <p data-i18n="welcome.body"></p>
       <button id="open-folder"><span data-i18n="welcome.open"></span> <kbd>⌘O</kbd></button>
+      <button id="new-document" class="link-button"><span data-i18n="welcome.new"></span> ⇧⌘N</button>
     </div>
 
     <main id="workspace">
@@ -180,6 +181,24 @@
         </div>
       </section>
     </div>
+    <div id="templates" class="sheet-backdrop" hidden>
+      <section class="sheet" role="dialog" aria-modal="true" aria-labelledby="templates-title">
+        <header class="sheet-head">
+          <h2 id="templates-title" data-i18n="template.title"></h2>
+          <button id="templates-close" class="sheet-done" data-i18n="unsaved.cancel"></button>
+        </header>
+        <p class="setting-hint" data-i18n="template.hint"></p>
+        <ul class="template-list">
+          <li><button data-template="article"><span data-i18n="template.article"></span><span class="template-hint" data-i18n="template.articleHint"></span></button></li>
+          <li><button data-template="ltjsarticle"><span data-i18n="template.ltjsarticle"></span><span class="template-hint" data-i18n="template.ltjsarticleHint"></span></button></li>
+          <li><button data-template="jsarticle"><span data-i18n="template.jsarticle"></span><span class="template-hint" data-i18n="template.jsarticleHint"></span></button></li>
+          <li><button data-template="beamer"><span data-i18n="template.beamer"></span><span class="template-hint" data-i18n="template.beamerHint"></span></button></li>
+          <li><button data-template="report"><span data-i18n="template.report"></span><span class="template-hint" data-i18n="template.reportHint"></span></button></li>
+          <li><button data-template="letter"><span data-i18n="template.letter"></span><span class="template-hint" data-i18n="template.letterHint"></span></button></li>
+        </ul>
+      </section>
+    </div>
+
     <script type="module" src="./main.ts"></script>
   </body>
 </html>

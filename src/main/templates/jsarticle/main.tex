@@ -1,0 +1,38 @@
+% upLaTeX と dvipdfmx でコンパイルします
+\documentclass[uplatex,dvipdfmx,a4paper,11pt]{jsarticle}
+
+\usepackage{amsmath}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage[hidelinks]{hyperref}
+\usepackage{pxjahyper}
+
+\title{題名}
+\author{著者}
+\date{\today}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+  ここに論文の要旨を書きます。
+\end{abstract}
+
+\section{はじめに}
+
+ここから書き始めます。文献はこのように引用します~\cite{okumura2023}。
+
+\section{方法}
+
+\begin{equation}
+  E = mc^2
+  \label{eq:energy}
+\end{equation}
+
+\section{おわりに}
+
+\bibliographystyle{jplain}
+\bibliography{references}
+
+\end{document}

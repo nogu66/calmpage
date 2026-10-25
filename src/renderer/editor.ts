@@ -6,6 +6,7 @@ import { lintGutter, setDiagnostics, type Diagnostic as CmDiagnostic } from '@co
 import { EditorState, Transaction, type Extension } from '@codemirror/state'
 import { EditorView, keymap } from '@codemirror/view'
 import { tags as t } from '@lezer/highlight'
+import { imageDrop } from './drop'
 
 // 色分けは控えめに: 命令は差し色（紙では太字の墨）、コメントは灰色、括弧は薄く、それ以外は本文の色。
 const latexHighlight = HighlightStyle.define([
@@ -70,6 +71,7 @@ export class Editor {
       syntaxHighlighting(latexHighlight),
       EditorView.lineWrapping,
       lintGutter(),
+      imageDrop,
       theme,
       // 外部変更の読み直し（userEvent なし）では呼ばない。
       EditorView.updateListener.of((u) => {
@@ -135,6 +137,47 @@ export class Editor {
     }
     doc.saved = text
     return true
+  }
+
+  // ---------- ファイル操作（閉じるときの保存、名前の変更、ゴミ箱） ----------
+
+  dirtyPaths(): string[] {
+    return [...this.docs.keys()].filter((path) => this.isDirty(path))
+  }
+
+  textOf(path: string): string | null {
+    if (path === this.path) return this.text()
+    return this.docs.get(path)?.state.doc.toString() ?? null
+  }
+
+  // 「保存しない」を選んだとき: 保存してある内容に戻す
+  revert(path: string): void {
+    const doc = this.docs.get(path)
+    if (!doc) return
+    if (path === this.path) this.view.dispatch({ changes: { from: 0, to: this.view.state.doc.length, insert: doc.saved } })
+    else doc.state = this.createState(doc.saved)
+  }
+
+  // ファイルかフォルダの名前が変わった。中にある書類も含めて、開いている状態を新しいパスへ移す
+  rename(from: string, to: string): void {
+    const moved = (p: string): string | null => (p === from ? to : p.startsWith(from + '/') ? to + p.slice(from.length) : null)
+    for (const [path, doc] of [...this.docs]) {
+      const next = moved(path)
+      if (!next) continue
+      this.docs.delete(path)
+      this.docs.set(next, doc)
+    }
+    if (this.path) this.path = moved(this.path) ?? this.path
+  }
+
+  // ゴミ箱に入れたファイル（フォルダならその中のもの）を忘れる。開いていたら空の画面にする
+  discard(target: string): void {
+    const inside = (p: string): boolean => p === target || p.startsWith(target + '/')
+    for (const path of [...this.docs.keys()]) if (inside(path)) this.docs.delete(path)
+    if (this.path && inside(this.path)) {
+      this.path = null
+      this.view.setState(this.createState(''))
+    }
   }
 
   // 選択している行の範囲。行頭で終わる選択はその行を含めない。

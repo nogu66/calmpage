@@ -385,6 +385,31 @@ body.no-preview #preview-col {
   font-weight: 600;
 }
 
+/* 名前の入力（新しいファイル・フォルダ、名前の変更） */
+#file-list li.naming {
+  padding: 1px 4px;
+  overflow: visible;
+}
+
+#file-list .name-input {
+  width: 100%;
+  font: inherit;
+  font-size: 13px;
+  color: var(--text);
+  background: var(--card);
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  padding: 2px 6px;
+  outline: none;
+  direction: ltr;
+}
+
+/* ファイルを落とせるとき */
+#sidebar.drop-target {
+  background: var(--hover);
+  border-radius: var(--card-radius);
+}
+
 /* いま組んでいる本体: 下線で示す */
 #file-list li.file.root {
   text-decoration: underline;
@@ -1498,6 +1523,10 @@ body.empty #welcome {
   margin-left: 6px;
 }
 
+#new-document {
+  margin-top: 12px;
+}
+
 /* ---------- 左下の設定ボタン ---------- */
 
 .icon-button {
@@ -1737,4 +1766,39 @@ body.no-sidebar:not(.empty) #open-settings {
 .switch:checked::after {
   transform: translateX(13px);
   background: var(--on-accent);
+}
+
+/* ---------- 新しい書類（雛形） ---------- */
+
+.template-list {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.template-list button {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  text-align: left;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: transparent;
+}
+
+.template-list button:hover,
+.template-list button:focus-visible {
+  background: var(--hover);
+  outline: none;
+}
+
+.template-hint {
+  font-size: 11.5px;
+  color: var(--muted);
 }
