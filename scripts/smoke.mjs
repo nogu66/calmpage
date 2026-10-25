@@ -385,6 +385,238 @@ await page.keyboard.press('Escape')
 const back = await page.locator('#toggle-ai').isVisible()
 check('AI パネルを使わない設定', agentsHidden && buttonHidden && menuItem?.visible === false && stillClosed && back, JSON.stringify({ agentsHidden, buttonHidden, menuItem, stillClosed, back }))
 
+// ---------- 班 5: 検索・タブ・履歴 ----------
+// エディターの中身は、表示していない行も含めて CodeMirror から読む
+const cmText = () => page.evaluate(() => document.querySelector('.cm-content').cmTile.root.view.state.doc.toString())
+const cmSelected = () => page.evaluate(() => {
+  const { state } = document.querySelector('.cm-content').cmTile.root.view
+  return state.sliceDoc(state.selection.main.from, state.selection.main.to)
+})
+const tabPaths = () => page.evaluate(() => [...document.querySelectorAll('#tabs .tab')].map((t) => t.dataset.path))
+const activeTab = () => page.evaluate(() => document.querySelector('#tabs .tab.active')?.dataset.path ?? null)
+const sources = readdirSync(folder, { recursive: true }).filter((f) => /\.(tex|bib|cls|sty|bst)$/.test(f)).map((f) => join(folder, f))
+const expectCount = (re) => {
+  let n = 0
+  let files = 0
+  for (const f of sources) {
+    const k = (readFileSync(f, 'utf8').match(re) ?? []).length
+    n += k
+    if (k) files++
+  }
+  return `${files} ファイルに ${n} 件`
+}
+const searchStatus = () => page.locator('#search .search-status').textContent()
+const waitSearch = (text) => waitFor((t) => document.querySelector('#search .search-status')?.textContent === t, text, 8000)
+const model = join(folder, 'sections/model.tex')
+const intro = join(folder, 'sections/introduction.tex')
+const fileItem = (path) => page.locator(`#file-list li[data-path="${path}"]`)
+const exists = (path) => {
+  try {
+    readFileSync(path)
+    return true
+  } catch {
+    return false
+  }
+}
+
+// フォルダ内の検索: ⇧⌘F（編集メニュー）でサイドバーが検索に替わり、結果はファイルごとにまとまる
+await fileItem(filePath).click()
+await waitStatus(['ok', 'warning', 'error'])
+await clickMenu('フォルダ内を検索')
+const searchOpen = await page.evaluate(() => ({
+  search: !!document.querySelector('#search').offsetParent,
+  files: !!document.querySelector('#file-list').offsetParent,
+  focused: document.activeElement?.classList.contains('search-input') ?? false
+}))
+const query = page.locator('#search .search-input').first()
+await query.fill('ink')
+const plain = await waitSearch(expectCount(/ink/gi))
+const groups = await page.evaluate(() => [...document.querySelectorAll('#search .search-group')].map((g) => [g.querySelector('.search-file').dataset.path, g.querySelectorAll('.search-hit').length]))
+await page.screenshot({ path: join(shots, '12-search.png') })
+check('フォルダ内を検索: ⇧⌘F で開き、ファイルごとにまとめる', searchOpen.search && !searchOpen.files && searchOpen.focused && plain && groups.length >= 2, `${JSON.stringify(searchOpen)} / ${await searchStatus()} / ${groups.map(([p, n]) => `${p.slice(folder.length + 1)}:${n}`).join(' ')}`)
+
+const opt = (name) => page.locator(`#search .search-opt[data-opt="${name}"]`)
+await opt('caseSensitive').click()
+await query.fill('Ink')
+const cased = await waitSearch(expectCount(/Ink/g))
+await opt('caseSensitive').click()
+await opt('wholeWord').click()
+const word = await waitSearch(expectCount(/(?<!\w)(?:Ink)(?!\w)/gi))
+await opt('wholeWord').click()
+await opt('regex').click()
+await query.fill('\\\\(sub)?section\\{')
+const regex = await waitSearch(expectCount(/\\(sub)?section\{/gi))
+await query.fill('(')
+const invalid = await waitSearch('正規表現が正しくありません')
+await opt('regex').click()
+check('検索: 大文字小文字・単語単位・正規表現', cased && word && regex && invalid, await searchStatus())
+
+// 結果を押すと、そのファイルのその場所へ移る
+await query.fill('capillary')
+await waitSearch(expectCount(/capillary/gi))
+const hit = page.locator('#search .search-hit').first()
+const hitPath = await hit.getAttribute('data-path')
+await hit.click()
+await page.waitForTimeout(500)
+const selected = await cmSelected()
+check('検索: 結果を押してその行へ移る', (await activeTab()) === hitPath && /^capillary$/i.test(selected), `${hitPath?.slice(folder.length + 1)} / 選択「${selected}」`)
+
+// すべて置換: 確かめてから、開いているファイルはエディターで、開いていないファイルはディスクで書き換える
+const sa = join(folder, 'smoke-search-a.tex')
+const sb = join(folder, 'smoke-search-b.tex')
+writeFileSync(sa, 'zqx-alpha zqx-beta\n')
+writeFileSync(sb, 'zqx-gamma\n')
+await page.locator('#search .search-close').click()
+await fileItem(sa).waitFor({ timeout: 8000 })
+await fileItem(sb).waitFor({ timeout: 8000 })
+await fileItem(sa).click()
+await waitStatus(['ok', 'warning', 'error'])
+await page.evaluate(() => {
+  window.__changed = []
+  window.sumi.onFileChanged((p) => window.__changed.push(p))
+})
+await app.evaluate(({ dialog }) => {
+  globalThis.__answers = [1, 0] // 1 回目は「キャンセル」、2 回目は「すべて置換」
+  globalThis.__asked = []
+  dialog.showMessageBox = async (_win, options) => {
+    globalThis.__asked.push(options.message)
+    return { response: globalThis.__answers.shift() ?? 1, checkboxChecked: false }
+  }
+})
+await clickMenu('フォルダ内を検索')
+await query.fill('zqx-')
+await waitSearch('2 ファイルに 3 件')
+await page.locator('#search .search-input').nth(1).fill('qq-')
+await page.locator('#search .search-replace-all').click()
+await page.waitForTimeout(500)
+const cancelled = (await cmText()) === 'zqx-alpha zqx-beta\n' && readFileSync(sb, 'utf8') === 'zqx-gamma\n'
+await page.locator('#search .search-replace-all').click()
+const replacedNote = await waitSearch('3 か所を置換しました')
+await page.waitForTimeout(1500)
+const confirmAsks = await app.evaluate(() => globalThis.__asked)
+const changedEvents = await page.evaluate(() => window.__changed)
+const editorA = await cmText()
+const diskA = readFileSync(sa, 'utf8')
+const diskB = readFileSync(sb, 'utf8')
+check(
+  'すべて置換: 確認し、開いているファイルはエディターで、ほかはディスクで',
+  cancelled && replacedNote && confirmAsks.length === 2 && confirmAsks[1] === '2 ファイルの 3 か所を置換しますか？' && editorA === 'qq-alpha qq-beta\n' && diskA === editorA && diskB === 'qq-gamma\n',
+  `キャンセル ${cancelled} / 確認 ${JSON.stringify(confirmAsks)} / エディター ${JSON.stringify(editorA)} / a ${JSON.stringify(diskA)} / b ${JSON.stringify(diskB)}`
+)
+check('すべて置換: 自分の書き込みを外部の変更と取り違えない', !changedEvents.includes(sb), JSON.stringify(changedEvents.map((p) => p.slice(folder.length + 1))))
+await page.keyboard.press('Escape')
+await clickMenu('フォルダ内を検索')
+await clickMenu('フォルダ内を検索')
+check('検索を閉じてファイル一覧に戻る', !(await page.evaluate(() => !!document.querySelector('#search').offsetParent)) && (await fileItem(filePath).isVisible()))
+
+// タブ: 開いたファイルが並び、本体の書類には印が付く
+await clickMenu('タブを閉じる') // smoke-search-a.tex
+unlinkSync(sa)
+unlinkSync(sb)
+await fileItem(filePath).click()
+await fileItem(intro).click()
+await fileItem(model).click()
+await waitStatus(['ok', 'warning', 'error'])
+let tabs = await tabPaths()
+const rootTab = await page.evaluate(() => document.querySelector('#tabs .tab.root')?.dataset.path ?? null)
+check('タブ: 開いたファイルが並び、本体に印', tabs.includes(filePath) && tabs.includes(intro) && tabs.includes(model) && (await activeTab()) === model && rootTab === filePath, `${tabs.map((p) => p.slice(folder.length + 1)).join(', ')} / 本体 ${rootTab?.slice(folder.length + 1)}`)
+
+// 未保存の印を付け、⌘W で保存してから閉じる（自動保存より先に閉じる）
+const modelBefore = readFileSync(model, 'utf8')
+await page.locator('.cm-content').click()
+await page.keyboard.press('Meta+ArrowDown')
+await page.keyboard.type('\n% tab-close-marker')
+const dirtyMark = await page.locator('#tabs .tab.active.dirty').count()
+await clickMenu('タブを閉じる')
+await page.waitForTimeout(400)
+const savedOnClose = readFileSync(model, 'utf8').includes('tab-close-marker')
+tabs = await tabPaths()
+const afterClose = await activeTab()
+check('タブ: 未保存の印と、⌘W で保存してから閉じる', dirtyMark === 1 && savedOnClose && !tabs.includes(model) && afterClose !== null && (await page.locator('#file-name').textContent()) === afterClose.slice(folder.length + 1), `印 ${dirtyMark} / 保存 ${savedOnClose} / 次 ${afterClose?.slice(folder.length + 1)}`)
+writeFileSync(model, modelBefore)
+await page.waitForTimeout(300)
+
+// ⌃Tab・⇧⌘[・⇧⌘]・メニューで移る
+await fileItem(model).click()
+await fileItem(intro).click()
+await waitStatus(['ok', 'warning', 'error'])
+// 消えたファイル（smoke-other.tex）のタブは、移ろうとしたときに外れるので数に入れない
+tabs = (await tabPaths()).filter(exists)
+const start = await activeTab()
+const at = (i) => tabs[(tabs.indexOf(start) + i + tabs.length) % tabs.length]
+const moves = []
+await page.locator('.cm-content').click()
+for (const key of ['Control+Tab', 'Meta+Shift+BracketLeft', 'Meta+Shift+BracketLeft', 'Meta+Shift+BracketRight', 'Control+Shift+Tab']) {
+  await page.keyboard.press(key)
+  await page.waitForTimeout(400)
+  moves.push(await activeTab())
+}
+await clickMenu('次のタブを表示')
+await page.waitForTimeout(400)
+moves.push(await activeTab())
+const expected = [at(1), at(0), at(-1), at(0), at(-1), at(0)]
+check('タブ: ⌃Tab・⇧⌘[ ⇧⌘]・メニューで移る', JSON.stringify(moves) === JSON.stringify(expected), moves.map((p) => p?.slice(folder.length + 1)).join(' → '))
+
+// 中クリックで閉じる（今のタブはそのまま）
+const victim = tabs.find((p) => p !== start && p !== filePath) ?? tabs.find((p) => p !== start)
+await page.locator(`#tabs .tab[data-path="${victim}"]`).click({ button: 'middle' })
+await page.waitForTimeout(300)
+tabs = await tabPaths()
+check('タブ: 中クリックで閉じる', !tabs.includes(victim) && (await activeTab()) === start, victim.slice(folder.length + 1))
+
+// 履歴: 保存のたびに版が残り、差分を見て戻せる。同じ内容は残さない
+await fileItem(filePath).click()
+await waitStatus(['ok', 'warning', 'error'])
+const historyDir = join(userData, 'history')
+const versionsBefore = await page.evaluate((p) => window.sumi.listVersions(p), filePath)
+const disk = readFileSync(filePath, 'utf8')
+await page.evaluate(([p, t]) => window.sumi.writeFile(p, t).then(() => window.sumi.writeFile(p, t)), [filePath, disk])
+const versionsSame = await page.evaluate((p) => window.sumi.listVersions(p), filePath)
+check('履歴: 保存のたびに版が残り、同じ内容は残さない', versionsBefore.length >= 3 && versionsSame.length === versionsBefore.length && readdirSync(historyDir).length >= 1, `${versionsBefore.length} 版 → 同じ内容を 2 回保存して ${versionsSame.length} 版`)
+
+// 印を書き足して保存し、履歴から 1 つ前の版（印のない版）に戻す
+await page.locator('.cm-content').click()
+await page.keyboard.press('Meta+ArrowDown')
+await page.keyboard.type('\n% history-marker')
+await clickMenu('保存してコンパイル')
+await waitStatus(['ok', 'warning', 'error'])
+await clickMenu('ファイルの履歴…')
+const historyShown = await waitFor(() => !document.querySelector('#history').hidden && document.querySelectorAll('#history .history-item').length > 0, null, 5000)
+const items = await page.locator('#history .history-item').count()
+const firstDiff = await page.locator('#history .history-diff .diff-row.add, #history .history-diff .diff-row.del').count()
+await page.screenshot({ path: join(shots, '10-history.png') })
+const previous = page.locator('#history .history-item[aria-selected="true"]')
+const oldestId = await previous.getAttribute('data-id')
+await previous.click()
+const oldText = await page.evaluate(([p, id]) => window.sumi.readVersion(p, id), [filePath, oldestId])
+await page.locator('#history .history-restore').click()
+await page.waitForTimeout(300)
+const restoredText = await cmText()
+const closedHistory = await page.locator('#history').isHidden()
+await page.waitForFunction(() => document.querySelector('#status').dataset.state === 'building', null, { timeout: 8000 }).catch(() => {})
+await waitStatus(['ok', 'warning', 'error'])
+const fresh = process.argv[2] ? true : oldText === readFileSync(resolve('examples/sample/main.tex'), 'utf8')
+check(
+  '履歴: 版の一覧と差分を見て、この版に戻す',
+  historyShown && items === versionsSame.length + 1 && firstDiff > 0 && restoredText === oldText && closedHistory && readFileSync(filePath, 'utf8') === oldText && fresh,
+  `${items} 版 / 差分 ${firstDiff} 行 / 戻した版 ${oldestId} / 最初の内容 ${fresh}`
+)
+
+// タブの並びは設定に残り、開き直すと戻る
+tabs = await tabPaths()
+await page.waitForTimeout(300)
+const storedTabs = JSON.parse(readFileSync(join(userData, 'settings.json'), 'utf8')).tabs ?? []
+await page.reload()
+await page.waitForSelector('#tabs .tab', { timeout: 10_000 }).catch(() => {})
+await waitStatus(['ok', 'warning', 'error'])
+const reopenedTabs = await tabPaths()
+check(
+  'タブ: 並びを設定に残し、開き直すと戻る',
+  JSON.stringify(storedTabs) === JSON.stringify(tabs) && JSON.stringify(reopenedTabs) === JSON.stringify(tabs.filter(exists)) && (await activeTab()) === filePath,
+  `${reopenedTabs.map((p) => p.slice(folder.length + 1)).join(', ')}`
+)
+await page.screenshot({ path: join(shots, '11-tabs.png') })
+
 check('コンソールにエラーなし', errors.length === 0, errors.slice(0, 3).join(' | '))
 await page.screenshot({ path: join(shots, '4-final.png') })
 await app.close()
