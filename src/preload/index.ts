@@ -5,7 +5,7 @@ import type { TemplateId } from '../main/templates'
 import type { ContentBlock, RequestPermissionRequest, SessionUpdate } from '@agentclientprotocol/sdk'
 import type { StartResult } from '../main/acp'
 import type { Settings } from '../main/settings'
-import type { RegistryAgent } from '../shared/agents'
+import type { AgentConfig, InstallProgress, RegistryAgent } from '../shared/agents'
 import type { SearchOptions, SearchResult } from '../shared/search'
 import type { Version } from '../main/history'
 
@@ -54,6 +54,9 @@ const api = {
   acpAnswer: (key: string, optionId: string | null): void => ipcRenderer.send('acp:answer', key, optionId),
   openLink: (url: string): void => ipcRenderer.send('link:open', url),
   listRegistry: (): Promise<{ agents?: RegistryAgent[]; error?: string }> => ipcRenderer.invoke('registry:list'),
+  registryIcons: (): Promise<Record<string, string>> => ipcRenderer.invoke('registry:icons'),
+  installAgent: (id: string): Promise<{ agent?: AgentConfig; error?: string }> => ipcRenderer.invoke('registry:install', id),
+  onInstallProgress: (cb: (id: string, progress: InstallProgress) => void) => on('registry:progress', cb),
   search: (query: string, opts: SearchOptions, overrides: Record<string, string>): Promise<SearchResult | { error: string } | null> =>
     ipcRenderer.invoke('search:run', query, opts, overrides),
   replaceInFolder: (query: string, opts: SearchOptions, replacement: string, exclude: string[]): Promise<{ files: number; count: number }> =>

@@ -1,11 +1,12 @@
 import type { BuildResult, Diagnostic } from '../main/build'
 import type { ContentBlock } from '@agentclientprotocol/sdk'
 import type { AgentConfig, AgentKind, Settings } from '../main/settings'
-import { DEFAULT_AGENTS, LOGIN_SHELL, type RegistryAgent } from '../shared/agents'
+import { DEFAULT_AGENTS, LOGIN_SHELL } from '../shared/agents'
 import type { FlushMode, SumiApi, Unsaved } from '../preload'
 import type { TemplateId } from '../main/templates'
 import { t, type Key } from '../shared/i18n'
 import { isImage, isText } from '../shared/paths'
+import { AgentPicker, RegistryStore } from './agent-picker'
 import { droppedFiles, guardWindowDrop, insertFigures, onImageDrop } from './drop'
 import { Editor } from './editor'
 import { PdfBar } from './pdf-bar'
@@ -68,6 +69,34 @@ const threads = new ThreadPane($('ai-threads'), {
   contextSummary,
   beforeSend: async () => void (await saveText())
 })
+// ACP の登録簿から選ぶ一覧。柱の「+」と設定の両方に置き、登録簿の中身は分け合う
+const registry = new RegistryStore(sumi)
+const pillarPicker = new AgentPicker(registry, {
+  tr,
+  agents: () => settings.agents,
+  add: (agent) => openNewAgent(agent),
+  installed: (agent) => openNewAgent(agent, !$('agent-picker').hidden),
+  open: (agent) => {
+    closePicker()
+    openTab(agent.id)
+  },
+  close: () => {
+    closePicker()
+    $('new-tab').focus()
+  },
+  custom: () => {
+    closePicker()
+    openSettings('agents')
+  }
+}, 'pillar')
+const settingsPicker = new AgentPicker(registry, {
+  tr,
+  agents: () => settings.agents,
+  add: (agent) => sumi.updateSettings({ agents: [...settings.agents, agent] })
+}, 'settings')
+$('agent-picker').append(pillarPicker.el)
+$('settings-picker').append(settingsPicker.el)
+
 const fileTabs = new TabBar($('tabs'), {
   tr,
   relative,
@@ -784,6 +813,8 @@ function setAiOpen(open: boolean, focus = true): void {
   document.body.classList.toggle('ai-open', open)
   $('toggle-ai').setAttribute('aria-pressed', String(open))
   sumi.saveSettings({ ai: open })
+  // 「+」から選ぶときにすぐ出せるよう、登録簿を先に読んでおく
+  if (open) void registry.load()
   if (open) ensureTab(focus)
   else editor.view.focus()
 }
@@ -912,10 +943,7 @@ function renderAgents(): void {
     menu.append(item)
   }
   const add = element('button', 'agent-item agent-add', tr('ai.addAgent'))
-  add.addEventListener('click', () => {
-    closeAgentMenu()
-    openSettings('agents')
-  })
+  add.addEventListener('click', openPicker)
   menu.append(element('hr', 'agent-sep'), add)
 
   const list = $('agent-list')
@@ -937,19 +965,24 @@ function renderAgents(): void {
     list.append(li)
   }
   renderAgentForm()
-  renderRegistry()
+  pillarPicker.render()
+  settingsPicker.render()
 }
 
 // ---------- 設定: エージェントの編集・登録簿 ----------
 
 let editingAgent: string | null = null
-let registry: RegistryAgent[] | null = null
 
 function renderAgentForm(): void {
   const editing = settings.agents.find((a) => a.id === editingAgent)
   $('agent-form-title').textContent = editing ? tr('settings.editing', { name: editing.name }) : tr('settings.custom')
   $('agent-form-submit').textContent = tr(editing ? 'settings.agentSave' : 'settings.agentAdd')
-  $('agent-form-cancel').hidden = !editing
+}
+
+// コマンドを手で書く欄。ふだんは畳んでおき、リンクか、行を押して編集するときに開く
+function showCustom(show: boolean): void {
+  $('agent-custom').hidden = !show
+  $('agent-custom-open').setAttribute('aria-expanded', String(show))
 }
 
 function setFormKind(kind: AgentKind): void {
@@ -966,6 +999,7 @@ function editAgent(agent: AgentConfig): void {
   $<HTMLInputElement>('agent-form-name').value = agent.name
   $<HTMLInputElement>('agent-form-command').value = joinCommand([agent.command, ...agent.args])
   setFormKind(agent.kind)
+  showCustom(true)
   renderAgents()
   $('agent-form-name').focus()
 }
@@ -974,46 +1008,13 @@ function resetAgentForm(): void {
   editingAgent = null
   $<HTMLFormElement>('agent-form').reset()
   setFormKind('acp')
+  showCustom(false)
   renderAgents()
 }
 
 function restoreDefaults(): void {
   const ids = new Set(DEFAULT_AGENTS.map((a) => a.id))
   sumi.updateSettings({ agents: [...DEFAULT_AGENTS, ...settings.agents.filter((a) => !ids.has(a.id))] })
-}
-
-async function toggleRegistry(): Promise<void> {
-  const open = $('registry').hidden
-  $('registry').hidden = !open
-  $('agent-browse').setAttribute('aria-expanded', String(open))
-  if (!open || registry) return renderRegistry()
-  $('registry-status').textContent = tr('settings.registryLoading')
-  const res = await sumi.listRegistry()
-  registry = res.agents ?? null
-  $('registry-status').textContent = res.error ? tr('settings.registryFailed', { error: res.error }) : ''
-  renderRegistry()
-  $('registry-search').focus()
-}
-
-function renderRegistry(): void {
-  if (!registry || $('registry').hidden) return
-  const query = $<HTMLInputElement>('registry-search').value.trim().toLowerCase()
-  const list = $('registry-list')
-  list.replaceChildren()
-  for (const entry of registry) {
-    const { agent } = entry
-    if (query && !`${agent.name} ${entry.description}`.toLowerCase().includes(query)) continue
-    const added = settings.agents.some((a) => a.id === agent.id)
-    const li = element('li', 'registry-row')
-    const main = element('div', 'agent-row-main')
-    main.append(element('div', 'agent-row-name', agent.name), element('div', 'registry-desc', entry.description))
-    const action = element('button', 'registry-add', tr(added ? 'settings.added' : entry.installed ? 'settings.agentAdd' : 'settings.notInstalled'))
-    action.disabled = added || !entry.installed
-    if (!entry.installed) action.title = tr('settings.notInstalledHint', { command: agent.command })
-    action.addEventListener('click', () => sumi.updateSettings({ agents: [...settings.agents, agent] }))
-    li.append(main, action)
-    list.append(li)
-  }
 }
 
 // 「+」の一覧。「+」はタブの数で左右に動くので、ウィンドウからはみ出さない位置に出す。
@@ -1028,7 +1029,39 @@ function openAgentMenu(): void {
 
 function closeAgentMenu(): void {
   $('agent-menu').hidden = true
-  $('new-tab').setAttribute('aria-expanded', 'false')
+  $('new-tab').setAttribute('aria-expanded', String(!$('agent-picker').hidden))
+}
+
+// 「エージェントを追加…」: 登録簿から選ぶ一覧を、「+」の下に出す
+function openPicker(): void {
+  closeAgentMenu()
+  const pop = $('agent-picker')
+  const button = $('new-tab').getBoundingClientRect()
+  pop.hidden = false
+  pillarPicker.reset()
+  void registry.load()
+  pop.style.top = `${button.bottom + 4}px`
+  pop.style.left = `${Math.max(8, Math.min(button.left, window.innerWidth - pop.offsetWidth - 8))}px`
+  pop.style.maxHeight = `${Math.max(200, Math.min(460, window.innerHeight - button.bottom - 16))}px`
+  $('new-tab').setAttribute('aria-expanded', 'true')
+  pillarPicker.focus()
+}
+
+function closePicker(): void {
+  $('agent-picker').hidden = true
+  $('new-tab').setAttribute('aria-expanded', String(!$('agent-menu').hidden))
+}
+
+// 一覧から選んだエージェントを足して、そのまま新しいタブで開く（設定画面は通らない）
+function openNewAgent(agent: AgentConfig, focus = true): void {
+  if (!agentById(agent.id)) {
+    settings.agents = [...settings.agents, agent]
+    sumi.updateSettings({ agents: settings.agents })
+  }
+  if (focus) closePicker()
+  if (!folder || !settings.aiEnabled) return
+  if (!aiOpen()) setAiOpen(true, false)
+  openTab(agent.id, focus)
 }
 
 function removeAgent(id: string): void {
@@ -1059,6 +1092,7 @@ function submitAgent(e: SubmitEvent): void {
   }
   $<HTMLFormElement>('agent-form').reset()
   setFormKind('acp')
+  showCustom(false)
 }
 
 function setAiWidth(px: number): void {
@@ -1176,12 +1210,19 @@ function onChip(name: ChipName): void {
 
 function setupAi(): void {
   $('toggle-ai').addEventListener('click', () => setAiOpen(!aiOpen()))
-  $('new-tab').addEventListener('click', () => ($('agent-menu').hidden ? openAgentMenu() : closeAgentMenu()))
+  $('new-tab').addEventListener('click', () => {
+    if (!$('agent-picker').hidden) return closePicker()
+    if ($('agent-menu').hidden) openAgentMenu()
+    else closeAgentMenu()
+  })
   document.addEventListener('pointerdown', (e) => {
-    if (!$('agent-menu').hidden && !(e.target as HTMLElement).closest('.agent-picker-wrap')) closeAgentMenu()
+    if ((e.target as HTMLElement).closest('.agent-picker-wrap')) return
+    if (!$('agent-menu').hidden) closeAgentMenu()
+    if (!$('agent-picker').hidden) closePicker()
   })
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape' && !$('agent-menu').hidden) closeAgentMenu()
+    if (e.key === 'Escape' && !$('agent-picker').hidden) closePicker()
   })
   $('new-thread').addEventListener('click', () => threads.newThread())
   for (const name of ['file', 'errors', 'pdf'] as ChipName[]) $(`chip-${name}`).addEventListener('click', () => onChip(name))
@@ -1190,9 +1231,13 @@ function setupAi(): void {
   }
   $<HTMLFormElement>('agent-form').addEventListener('submit', submitAgent)
   $('agent-form-cancel').addEventListener('click', resetAgentForm)
-  $('agent-browse').addEventListener('click', () => void toggleRegistry())
+  $('agent-custom-open').addEventListener('click', () => {
+    const show = $('agent-custom').hidden
+    if (!show) return resetAgentForm()
+    showCustom(true)
+    $('agent-form-name').focus()
+  })
   $('agent-restore').addEventListener('click', restoreDefaults)
-  $('registry-search').addEventListener('input', renderRegistry)
   let scrollFrame = 0
   $('pdf-scroll').addEventListener('scroll', () => {
     cancelAnimationFrame(scrollFrame)
@@ -1442,6 +1487,8 @@ function applyLanguage(): void {
   for (const el of document.querySelectorAll<HTMLInputElement>('[data-i18n-placeholder]')) el.placeholder = tr(el.dataset.i18nPlaceholder as Key)
   threads.applyLanguage()
   searchPanel.applyLanguage()
+  pillarPicker.applyLanguage()
+  settingsPicker.applyLanguage()
   fileTabs.render()
   $('status-text').textContent = tr(status.key, status.params)
   if (pdfNote) setPdfNote(pdfNote.key, pdfNote.params)
@@ -1504,8 +1551,11 @@ function applySettings(next: Settings): void {
 
 function openSettings(section?: 'agents'): void {
   $('settings').hidden = false
+  settingsPicker.reset()
+  void registry.load()
   if (section === 'agents') {
-    $('agent-list').scrollIntoView({ block: 'center' })
+    showCustom(true)
+    $('agent-custom').scrollIntoView({ block: 'center' })
     $('agent-form-name').focus()
   } else {
     $('settings-close').focus()

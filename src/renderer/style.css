@@ -1168,52 +1168,154 @@ button.agent-row-main:hover,
   color: var(--text);
 }
 
-#registry[hidden] {
+.agent-sub {
+  margin: 14px 0 6px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+#agent-custom-open {
+  margin-top: 10px;
+}
+
+#agent-custom {
+  margin-top: 8px;
+}
+
+#agent-custom[hidden] {
   display: none;
 }
 
-#registry {
-  margin-bottom: 12px;
+/* ---------- ACP の登録簿から選ぶ一覧 ---------- */
+
+#agent-picker {
+  position: fixed;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  width: min(380px, calc(100vw - 16px));
+  border-radius: 10px;
+  background: var(--raised);
+  box-shadow: 0 0 0 1px var(--border), 0 10px 30px rgba(0, 0, 0, 0.12);
 }
 
-#registry-search {
+#agent-picker[hidden] {
+  display: none;
+}
+
+.picker {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+.picker-pillar {
+  padding: 6px;
+}
+
+.picker-search {
+  flex: none;
   width: 100%;
   border: 1px solid var(--border);
   border-radius: 8px;
   background: var(--card);
   color: var(--text);
   font: inherit;
-  font-size: 12px;
+  font-size: 12.5px;
   padding: 6px 8px;
   outline: none;
 }
 
-#registry-search:focus {
+.picker-search:focus {
   border-color: var(--faint);
 }
 
-.registry-list {
+.picker-status-row {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 0 4px;
+}
+
+.picker-status {
+  margin: 0;
+  font-size: 11.5px;
+  color: var(--muted);
+}
+
+.picker-status:not(:empty),
+.picker-retry:not([hidden]) {
+  margin-top: 8px;
+}
+
+.picker-retry[hidden] {
+  display: none;
+}
+
+.picker-list {
   list-style: none;
-  margin: 6px 0 0;
+  margin: 4px 0 0;
   padding: 0;
-  max-height: 260px;
+  min-height: 0;
   overflow-y: auto;
   scrollbar-width: thin;
 }
 
-.registry-row {
+.picker-settings .picker-list {
+  max-height: 280px;
+}
+
+.picker-row {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 7px 0;
-  border-top: 1px solid var(--border);
+  padding: 7px 8px;
+  border-radius: 7px;
+  cursor: default;
 }
 
-.registry-row .agent-row-name {
+.picker-row.active {
+  background: var(--hover);
+}
+
+.picker-row[data-state='unavailable'] .picker-name,
+.picker-row[data-state='unavailable'] .picker-icon {
+  opacity: 0.55;
+}
+
+.picker-icon {
+  flex: none;
+  align-self: flex-start;
+  width: 18px;
+  height: 18px;
+  margin-top: 1px;
+  background: var(--text);
+  mask: var(--icon) center / contain no-repeat;
+}
+
+.picker-icon.letter {
+  display: grid;
+  place-items: center;
+  mask: none;
+  border-radius: 5px;
+  background: var(--hover);
+  color: var(--muted);
+  font-size: 10.5px;
+  font-weight: 600;
+}
+
+.picker-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.picker-name {
   font-size: 12.5px;
+  color: var(--text);
 }
 
-.registry-desc {
+.picker-desc {
   font-size: 11px;
   color: var(--muted);
   display: -webkit-box;
@@ -1222,7 +1324,17 @@ button.agent-row-main:hover,
   overflow: hidden;
 }
 
-.registry-add {
+.picker-note {
+  margin-top: 2px;
+  font-size: 11px;
+  color: var(--text);
+}
+
+.picker-note.failed {
+  color: var(--muted);
+}
+
+.picker-action {
   flex: none;
   border: 1px solid var(--border);
   border-radius: 999px;
@@ -1231,14 +1343,30 @@ button.agent-row-main:hover,
   font: inherit;
   font-size: 11.5px;
   padding: 2px 10px;
+  pointer-events: none;
 }
 
-.registry-add:hover:not(:disabled) {
-  background: var(--hover);
+.picker-row.active .picker-action:not(:disabled) {
+  border-color: var(--faint);
 }
 
-.registry-add:disabled {
+.picker-action:disabled {
   color: var(--faint);
+}
+
+.picker-reason {
+  flex: none;
+  max-width: 40%;
+  font-size: 11px;
+  color: var(--faint);
+  text-align: right;
+}
+
+.picker-foot {
+  flex: none;
+  padding: 6px 8px 2px;
+  border-top: 1px solid var(--border);
+  margin-top: 4px;
 }
 
 .agent-form-title {

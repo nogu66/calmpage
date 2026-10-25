@@ -6,12 +6,14 @@ import { backwardSync, forwardSync } from './build'
 import { createFile, createFolder, importData, importFile, listCompletionFiles, listProjectEntries, listProjectFiles, renamePath } from './files'
 import { isEmptyFolder, TEMPLATE_IDS, writeTemplate, type TemplateId } from './templates'
 import { listVersions, readVersion, recordVersion } from './history'
-import { loadRegistry } from './registry'
+import { installAgent, removeInstalled } from './installer'
+import { loadIcons, loadRegistry, resetRegistry } from './registry'
 import { replaceInFiles, searchFiles } from './search'
 import { warmUpShellEnv } from './shell-env'
 import { answer, Workspace } from './workspace'
 import { t, type Key } from '../shared/i18n'
 import { isText } from '../shared/paths'
+import type { InstallProgress } from '../shared/agents'
 import type { SearchOptions } from '../shared/search'
 import { loadSettings, saveSettings, type AgentConfig, type Palette, type Settings, type Theme, type WindowState } from './settings'
 
@@ -43,6 +45,8 @@ const pendingOpens: string[] = []
 
 // 自動テスト用: いま前にある窓。テストの窓はフォーカスを取らないので、前に出したかは focus では確かめられない
 if (testing) (globalThis as { __calmpageFront?: () => number | null }).__calmpageFront = () => front?.win.id ?? null
+// 自動テスト用: fetch を差し替えたあとに、登録簿を読み直させる
+if (testing) (globalThis as { __calmpageResetRegistry?: () => void }).__calmpageResetRegistry = resetRegistry
 
 function wsOf(sender: WebContents): Workspace | null {
   return workspaces.find((ws) => ws.contentsId === sender.id) ?? null
@@ -324,6 +328,8 @@ function updateSettings(patch: Partial<Settings>): void {
       }
     }
   }
+  // 外したエージェントのうち、Calmpage が入れたものはファイルも片付ける
+  if (patch.agents) void removeInstalled(loadSettings().agents, patch.agents)
   saveSettings(patch)
   if (patch.aiEnabled === false) for (const ws of workspaces) ws.stopAgents()
   if (patch.theme) nativeTheme.themeSource = patch.theme
@@ -602,7 +608,25 @@ function registerIpc(): void {
     try {
       return { agents: await loadRegistry() }
     } catch (err) {
-      return { error: String(err) }
+      return { error: err instanceof Error ? err.message : String(err) }
+    }
+  })
+  ipcMain.handle('registry:icons', () => loadIcons().catch(() => ({})))
+  // 取ってきて入れたら、設定に足す。進み具合はすべての窓へ知らせる（同じ一覧を別の窓で開いていることがある）
+  ipcMain.handle('registry:install', async (_e, id: string) => {
+    const progress = (p: InstallProgress): void => {
+      for (const ws of workspaces) ws.send('registry:progress', id, p)
+    }
+    try {
+      const agent = await installAgent(id, progress)
+      const agents = loadSettings().agents
+      if (!agents.some((a) => a.id === agent.id)) updateSettings({ agents: [...agents, agent] })
+      progress({ phase: 'done' })
+      return { agent }
+    } catch (err) {
+      const error = err instanceof Error ? err.message : String(err)
+      progress({ phase: 'failed', error })
+      return { error }
     }
   })
   handle('folder:completion-files', (ws) => (ws.folder ? listCompletionFiles(ws.folder) : []))

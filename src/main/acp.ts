@@ -33,6 +33,8 @@ interface Tab {
 }
 
 function message(err: unknown): string {
+  // 「Internal error」だけでは分からないので、エージェントが添えた説明（goose の「プロバイダーが未設定」など）も出す
+  if (err instanceof acp.RequestError && typeof err.data === 'string' && !err.message.includes(err.data)) return `${err.message}: ${err.data}`
   if (err instanceof Error) return err.message
   return String(err)
 }
