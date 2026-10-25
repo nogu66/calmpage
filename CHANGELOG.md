@@ -2,7 +2,7 @@
 
 All notable changes to Calmpage are listed here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## Unreleased
+## 0.4.0 - 2026-10-25
 
 ### Added
 
@@ -42,6 +42,7 @@ All notable changes to Calmpage are listed here. The format follows [Keep a Chan
 
 - upLaTeX documents failed to compile, because `latexmk` does not accept `-bibtex=upbibtex`. upbibtex is now set with `-e`.
 - Warnings from files read with `\input` (such as undefined references) pointed at the root document instead of the file that caused them.
+- In a long file list, names scrolled underneath the settings button at the bottom left. The list now ends above the button.
 
 ### Changed
 
