@@ -2227,6 +2227,9 @@ body.no-sidebar:not(.empty) #open-settings {
 
 .template-hint {
   font-size: 11.5px;
+  color: var(--muted);
+}
+
 /* ---------- エディターのタブ（ファイル一覧の行と同じ見た目を横に並べる） ---------- */
 
 #tabs {

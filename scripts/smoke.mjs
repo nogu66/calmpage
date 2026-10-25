@@ -6,7 +6,7 @@ import { appendFileSync, cpSync, mkdirSync, mkdtempSync, readdirSync, readFileSy
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { spawnSync } from 'node:child_process'
-import { existsSync, rmSync } from 'node:fs'
+import { existsSync, rmSync, statSync } from 'node:fs'
 
 const folder = process.argv[2] ? resolve(process.argv[2]) : join(mkdtempSync(join(tmpdir(), 'calmpage-sample-')), 'sample')
 if (!process.argv[2]) cpSync(resolve('examples/sample'), folder, { recursive: true })
@@ -1168,7 +1168,11 @@ await page.screenshot({ path: join(shots, '11-tabs.png') })
 
   // 中間ファイルを消す: 出力先の .aux などが消え、PDF と SyncTeX は残る
   await openAndBuild(filePath)
-  const cache = join(userData, 'build', readdirSync(join(userData, 'build')).find((d) => d.startsWith(`${base}-`)))
+  // 雛形のテストも main.tex を組むので、同じ名前のキャッシュが複数ある。いま組んだもの（いちばん新しいもの）を見る
+  const cache = readdirSync(join(userData, 'build'))
+    .filter((d) => d.startsWith(`${base}-`))
+    .map((d) => join(userData, 'build', d))
+    .sort((a, b) => statSync(b).mtimeMs - statSync(a).mtimeMs)[0]
   const beforeClean = readdirSync(cache)
   await clickMenu('中間ファイルを消す')
   const cleaned = await page.waitForFunction(() => document.querySelector('#status-text').textContent === '中間ファイルを消しました', null, { timeout: 30_000 }).then(() => true).catch(() => false)
