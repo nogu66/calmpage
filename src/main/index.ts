@@ -5,10 +5,13 @@ import { dirname, join, sep } from 'node:path'
 import { AcpAgents } from './acp'
 import { backwardSync, build, forwardSync, resolveRoot, type BuildResult } from './build'
 import { FolderWatcher, listProjectFiles } from './files'
+import { listVersions, readVersion, recordVersion } from './history'
 import { loadRegistry } from './registry'
+import { replaceInFiles, searchFiles } from './search'
 import { warmUpShellEnv } from './shell-env'
 import { Terminals } from './terminals'
 import { t, type Key } from '../shared/i18n'
+import type { SearchOptions } from '../shared/search'
 import { loadSettings, saveSettings, type AgentConfig, type Palette, type Settings, type Theme } from './settings'
 
 // Finder から起動するとシェルの PATH を引き継がないため、TeX と Homebrew の場所を足しておく。
@@ -32,7 +35,10 @@ let currentRoot: string | null = null
 let currentPdf: string | null = null
 let pendingOpen: string | null = process.env.CALMPAGE_OPEN ?? null
 
-const watcher = new FolderWatcher((path, content) => win?.webContents.send('file:changed', path, content))
+const watcher = new FolderWatcher((path, content) => {
+  win?.webContents.send('file:changed', path, content)
+  void recordVersion(path, content) // AI などの書き換えも、あとで戻せるように
+})
 const terminals = new Terminals(send)
 const acpAgents = new AcpAgents(send)
 
@@ -182,7 +188,10 @@ function buildMenu(): void {
           { label: tr('menu.saveCompile'), accelerator: 'CmdOrCtrl+S', click: command('save') },
           { label: tr('menu.compile'), accelerator: 'CmdOrCtrl+R', click: command('build') },
           { type: 'separator' },
-          { label: tr('menu.openPdf'), accelerator: 'CmdOrCtrl+Shift+O', click: command('open-pdf') }
+          { label: tr('menu.openPdf'), accelerator: 'CmdOrCtrl+Shift+O', click: command('open-pdf') },
+          { type: 'separator' },
+          { label: tr('menu.history'), click: command('history') },
+          { label: tr('menu.closeTab'), accelerator: 'CmdOrCtrl+W', click: command('close-tab') }
         ]
       },
       {
@@ -191,7 +200,9 @@ function buildMenu(): void {
           { role: 'cut', label: tr('menu.cut') },
           { role: 'copy', label: tr('menu.copy') },
           { role: 'paste', label: tr('menu.paste') },
-          { role: 'selectAll', label: tr('menu.selectAll') }
+          { role: 'selectAll', label: tr('menu.selectAll') },
+          { type: 'separator' },
+          { label: tr('menu.findInFolder'), accelerator: 'CmdOrCtrl+Shift+F', click: command('find-in-folder') }
         ]
       },
       {
@@ -219,7 +230,10 @@ function buildMenu(): void {
           { role: 'minimize', label: tr('menu.minimize') },
           { role: 'zoom', label: tr('menu.zoom') },
           { type: 'separator' },
-          { role: 'front', label: tr('menu.front') }
+          { role: 'front', label: tr('menu.front') },
+          { type: 'separator' },
+          { label: tr('menu.nextTab'), accelerator: 'Ctrl+Tab', click: command('next-tab') },
+          { label: tr('menu.prevTab'), accelerator: 'Ctrl+Shift+Tab', click: command('prev-tab') }
         ]
       }
     ])
@@ -254,8 +268,10 @@ function registerIpc(): void {
   ipcMain.handle('file:read', (_e, path: string) => readFile(path, 'utf8'))
   ipcMain.handle('file:write', async (_e, path: string, content: string) => {
     watcher.noteWrite(path, content)
+    await recordVersion(path, content)
     await writeFile(path, content, 'utf8')
   })
+  registerSearchAndHistory()
   ipcMain.on('build:request', (_e, file: string) => void requestBuild(file))
   ipcMain.handle('pdf:read', (_e, path: string) => readFile(path))
   ipcMain.handle('pdf:open-external', () => (currentPdf ? shell.openPath(currentPdf) : null))
@@ -292,6 +308,42 @@ function registerIpc(): void {
   ipcMain.on('link:open', (_e, url: string) => {
     if (/^https?:\/\//.test(url)) void shell.openExternal(url)
   })
+}
+
+// フォルダ内の検索と置換、ファイルの履歴。新しい検索が来たら、古い検索は途中でやめる。
+let searchRun = 0
+
+function inFolder(path: string): boolean {
+  return !!folder && path.startsWith(folder + sep)
+}
+
+function registerSearchAndHistory(): void {
+  ipcMain.handle('search:run', async (_e, query: string, opts: SearchOptions, overrides: Record<string, string>) => {
+    const run = ++searchRun
+    if (!folder || !query) return { files: [], total: 0, truncated: false }
+    try {
+      return await searchFiles(await listProjectFiles(folder), overrides, query, opts, () => run !== searchRun)
+    } catch (err) {
+      return { error: String(err) }
+    }
+  })
+  ipcMain.handle('search:replace', async (_e, query: string, opts: SearchOptions, replacement: string, exclude: string[]) => {
+    if (!folder || !query) return { files: 0, count: 0 }
+    const skip = new Set(exclude)
+    const targets = (await listProjectFiles(folder)).filter((p) => inFolder(p) && !skip.has(p))
+    // 自分の書き込みを外部の変更と取り違えないよう、書く前に見張りへ知らせる
+    return replaceInFiles(targets, query, opts, replacement, (path, before, after) => {
+      watcher.noteWrite(path, after)
+      void recordVersion(path, after, before)
+    })
+  })
+  ipcMain.handle('dialog:confirm', async (_e, message: string, detail: string, ok: string, cancel: string) => {
+    if (!win) return false
+    const res = await dialog.showMessageBox(win, { type: 'question', message, detail, buttons: [ok, cancel], defaultId: 0, cancelId: 1 })
+    return res.response === 0
+  })
+  ipcMain.handle('history:list', (_e, path: string) => listVersions(path))
+  ipcMain.handle('history:read', (_e, path: string, id: string) => readVersion(path, id))
 }
 
 function createWindow(): void {

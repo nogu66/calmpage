@@ -149,7 +149,39 @@ const en = {
 
   'build.overfull': 'Overfull box ({amount})',
   'build.noPages': 'No pages of output.',
-  'build.noLatexmk': 'Cannot start latexmk: {detail}'
+  'build.noLatexmk': 'Cannot start latexmk: {detail}',
+
+  'menu.findInFolder': 'Find in Folder',
+  'menu.history': 'File History…',
+  'menu.closeTab': 'Close Tab',
+  'menu.nextTab': 'Show Next Tab',
+  'menu.prevTab': 'Show Previous Tab',
+  'search.close': 'Back to the file list (⇧⌘F)',
+  'search.query': 'Search in folder',
+  'search.replace': 'Replace',
+  'search.case': 'Match case',
+  'search.word': 'Match whole word',
+  'search.regex': 'Use regular expression',
+  'search.replaceAll': 'Replace All',
+  'search.searching': 'Searching…',
+  'search.none': 'No results',
+  'search.invalid': 'Invalid regular expression',
+  'search.count': (p: Params) => `${p.n} ${p.n === 1 ? 'result' : 'results'} in ${p.files} ${p.files === 1 ? 'file' : 'files'}`,
+  'search.truncated': 'Showing the first {n} results',
+  'search.confirm': (p: Params) => `Replace ${p.n} ${p.n === 1 ? 'match' : 'matches'} in ${p.files} ${p.files === 1 ? 'file' : 'files'}?`,
+  'search.confirmDetail': '“{query}” becomes “{replacement}”. Open files change in the editor; the others are written to disk. Each file’s previous version stays in File History.',
+  'search.confirmOk': 'Replace All',
+  'search.cancel': 'Cancel',
+  'search.replaced': (p: Params) => `Replaced ${p.n} ${p.n === 1 ? 'match' : 'matches'}`,
+  'tabs.close': 'Close (⌘W)',
+  'tabs.root': 'Root document',
+  'history.title': 'History of {file}',
+  'history.empty': 'No versions yet. A version is kept each time the file is saved.',
+  'history.same': 'Current',
+  'history.noDiff': 'No differences from the current text.',
+  'history.compare': '{time} → now',
+  'history.restore': 'Restore This Version',
+  'history.close': 'Close'
 } satisfies Record<string, Entry>
 
 export type Key = keyof typeof en
@@ -296,7 +328,39 @@ const ja: Record<Key, Entry> = {
 
   'build.overfull': 'はみ出し ({amount})',
   'build.noPages': 'PDF が 1 ページも出力されませんでした',
-  'build.noLatexmk': 'latexmk を起動できません: {detail}'
+  'build.noLatexmk': 'latexmk を起動できません: {detail}',
+
+  'menu.findInFolder': 'フォルダ内を検索',
+  'menu.history': 'ファイルの履歴…',
+  'menu.closeTab': 'タブを閉じる',
+  'menu.nextTab': '次のタブを表示',
+  'menu.prevTab': '前のタブを表示',
+  'search.close': 'ファイル一覧に戻る (⇧⌘F)',
+  'search.query': 'フォルダ内を検索',
+  'search.replace': '置換',
+  'search.case': '大文字と小文字を区別',
+  'search.word': '単語単位',
+  'search.regex': '正規表現',
+  'search.replaceAll': 'すべて置換',
+  'search.searching': '検索中…',
+  'search.none': '見つかりません',
+  'search.invalid': '正規表現が正しくありません',
+  'search.count': '{files} ファイルに {n} 件',
+  'search.truncated': '最初の {n} 件を表示しています',
+  'search.confirm': '{files} ファイルの {n} か所を置換しますか？',
+  'search.confirmDetail': '「{query}」を「{replacement}」にします。開いているファイルはエディターの中で、そのほかはディスクのファイルを書き換えます。前の版はファイルの履歴に残ります。',
+  'search.confirmOk': 'すべて置換',
+  'search.cancel': 'キャンセル',
+  'search.replaced': '{n} か所を置換しました',
+  'tabs.close': '閉じる (⌘W)',
+  'tabs.root': '本体の書類',
+  'history.title': '{file} の履歴',
+  'history.empty': 'まだ版がありません。保存するたびに版が残ります。',
+  'history.same': '今の内容',
+  'history.noDiff': '今の内容との違いはありません。',
+  'history.compare': '{time} → 今',
+  'history.restore': 'この版に戻す',
+  'history.close': '閉じる'
 }
 
 const DICTS: Record<Lang, Record<Key, Entry>> = { en, ja }

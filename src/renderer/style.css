@@ -1738,3 +1738,414 @@ body.no-sidebar:not(.empty) #open-settings {
   transform: translateX(13px);
   background: var(--on-accent);
 }
+
+/* ---------- エディターのタブ（ファイル一覧の行と同じ見た目を横に並べる） ---------- */
+
+#tabs {
+  flex: none;
+  display: flex;
+  gap: 2px;
+  padding: 6px 8px 2px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  user-select: none;
+}
+
+#tabs:empty,
+body.empty #tabs {
+  display: none;
+}
+
+.tab {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  max-width: 220px;
+  padding: 3px 3px 3px 10px;
+  border-radius: 7px;
+  color: var(--muted);
+  cursor: default;
+  font-size: 12.5px;
+  white-space: nowrap;
+}
+
+.tab:hover {
+  background: var(--hover);
+}
+
+.tab.active {
+  background: var(--file-active);
+  box-shadow: var(--file-active-shadow);
+  color: var(--text);
+  font-weight: 600;
+}
+
+.tab-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 本体の書類: ファイル一覧と同じく下線で示す */
+.tab.root .tab-name {
+  text-decoration: underline;
+  text-decoration-color: var(--accent);
+  text-decoration-thickness: 1.5px;
+  text-underline-offset: 4px;
+}
+
+.tab-dir {
+  margin-left: 4px;
+  color: var(--faint);
+  font-size: 11px;
+  font-weight: 400;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tab-close {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  margin-left: 2px;
+  padding: 0;
+  border: none;
+  border-radius: 5px;
+  background: none;
+  color: var(--faint);
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 1;
+  visibility: hidden;
+}
+
+.tab:hover .tab-close,
+.tab.active .tab-close,
+.tab.dirty .tab-close {
+  visibility: visible;
+}
+
+.tab-close:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+
+/* 未保存: × の代わりに点を出し、指を乗せると × に戻る */
+.tab.dirty .tab-close .x {
+  display: none;
+}
+
+.tab.dirty .tab-close::before {
+  content: '';
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--muted);
+}
+
+.tab.dirty .tab-close:hover::before {
+  display: none;
+}
+
+.tab.dirty .tab-close:hover .x {
+  display: inline;
+}
+
+/* ---------- フォルダ内の検索（サイドバーで、ファイル一覧と入れ替わる） ---------- */
+
+#search {
+  display: none;
+}
+
+body.search-open #sidebar > :not(#search) {
+  display: none;
+}
+
+body.search-open #search {
+  display: flex;
+  flex-direction: column;
+}
+
+.search-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 2px 2px 6px 10px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.search-close {
+  border: none;
+  background: none;
+  color: var(--muted);
+  font-size: 16px;
+  line-height: 1;
+  padding: 0 4px;
+}
+
+.search-close:hover {
+  color: var(--text);
+}
+
+.search-field {
+  display: flex;
+  align-items: center;
+  margin: 0 2px 6px;
+  border-radius: 7px;
+  background: var(--card);
+  box-shadow: 0 0 0 1px var(--border);
+}
+
+.search-field:focus-within {
+  box-shadow: 0 0 0 1px var(--faint);
+}
+
+.search-input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: var(--text);
+  font: 12.5px var(--font-ui);
+  padding: 5px 8px;
+}
+
+.search-input::placeholder {
+  color: var(--faint);
+}
+
+.search-opt {
+  flex: none;
+  margin-right: 3px;
+  padding: 1px 4px;
+  border: none;
+  border-radius: 4px;
+  background: none;
+  color: var(--faint);
+  font: 11px var(--font-mono);
+}
+
+.search-opt[data-opt='wholeWord'] {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.search-opt:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+
+.search-opt[aria-pressed='true'] {
+  background: var(--file-active);
+  box-shadow: inset 0 0 0 1px var(--border);
+  color: var(--text);
+}
+
+.search-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin: -2px 2px 2px;
+}
+
+.search-replace-all:disabled {
+  color: var(--faint);
+  cursor: default;
+}
+
+.search-status {
+  margin: 2px 10px 6px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.search-results,
+.search-hits {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.search-hits {
+  margin-bottom: 6px;
+}
+
+.search-group.collapsed .search-hits {
+  display: none;
+}
+
+.search-file,
+.search-hit {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  border-radius: 7px;
+  cursor: default;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.search-file {
+  padding: 3px 10px;
+}
+
+.search-file:hover,
+.search-hit:hover {
+  background: var(--hover);
+}
+
+.search-file-name {
+  flex: none;
+  max-width: 70%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-weight: 600;
+}
+
+.search-file-dir {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--faint);
+  font-size: 11px;
+}
+
+.search-file-count {
+  margin-left: auto;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.search-hit {
+  padding: 2px 10px 2px 14px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.search-hit.active {
+  background: var(--file-active);
+  box-shadow: var(--file-active-shadow);
+  color: var(--text);
+}
+
+.search-hit-line {
+  flex: none;
+  min-width: 20px;
+  text-align: right;
+  color: var(--faint);
+  font: 10.5px var(--font-mono);
+}
+
+.search-hit-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font: 11.5px var(--font-mono);
+}
+
+.search-hit-text mark {
+  border-radius: 2px;
+  background: var(--selection);
+  color: var(--text);
+  box-shadow: 0 0 0 1px var(--selection);
+}
+
+/* ---------- ファイルの履歴（設定と同じシート） ---------- */
+
+.history-sheet {
+  width: 860px;
+  height: 72vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.history-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.history-actions {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.history-restore:disabled {
+  color: var(--faint);
+  cursor: default;
+}
+
+.history-body {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 210px minmax(0, 1fr);
+  gap: 14px;
+  margin-top: 10px;
+}
+
+.history-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+
+.history-item {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  margin: 1px 0;
+  padding: 5px 10px;
+  border: none;
+  border-radius: 7px;
+  background: none;
+  color: var(--muted);
+  text-align: left;
+  font-size: 12px;
+}
+
+.history-item:hover {
+  background: var(--hover);
+}
+
+.history-item[aria-selected='true'] {
+  background: var(--file-active);
+  box-shadow: var(--file-active-shadow);
+  color: var(--text);
+}
+
+.history-item:focus-visible {
+  outline: 1px solid var(--faint);
+}
+
+.history-when {
+  white-space: nowrap;
+}
+
+.history-stat {
+  flex: none;
+  color: var(--faint);
+  font: 11px var(--font-mono);
+}
+
+.history-diff {
+  min-width: 0;
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+
+.history-empty {
+  margin: 8px 0;
+  color: var(--muted);
+}

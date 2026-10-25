@@ -5,7 +5,10 @@ import { DEFAULT_AGENTS, LOGIN_SHELL, type RegistryAgent } from '../shared/agent
 import type { SumiApi } from '../preload'
 import { t, type Key } from '../shared/i18n'
 import { Editor } from './editor'
+import { HistorySheet } from './history'
 import { Preview } from './preview'
+import { SearchPanel } from './search'
+import { TabBar } from './tabs'
 import { TerminalPane } from './terminal'
 import { ThreadPane } from './thread'
 
@@ -46,6 +49,43 @@ const threads = new ThreadPane($('ai-threads'), {
   contextSummary,
   beforeSend: saveText
 })
+const tabs = new TabBar($('tabs'), {
+  tr,
+  relative,
+  activePath: () => editor.path,
+  rootPath: () => lastRoot,
+  isDirty: (path) => editor.isDirty(path),
+  select: (path) => void openFile(path).catch(() => tabs.remove(path)), // 消えたファイルのタブは外す
+  close: (path) => void closeTab(path),
+  changed: (paths) => {
+    settings.tabs = paths
+    sumi.saveSettings({ tabs: paths })
+  }
+})
+const searchPanel = new SearchPanel($('search'), {
+  sumi,
+  editor,
+  tr,
+  relative,
+  inFolder: (path) => !!folder && path.startsWith(folder + '/'),
+  open: async (path, m) => {
+    await openFile(path)
+    editor.selectMatch(m.line, m.column, m.length)
+  },
+  showSidebar: () => {
+    if (document.body.classList.contains('no-sidebar')) toggleSidebar()
+  },
+  replaced: (paths) => void afterReplace(paths)
+})
+const historySheet = new HistorySheet({
+  sumi,
+  tr,
+  lang: () => settings.language,
+  relative,
+  current: (path) => editor.textOf(path),
+  restore: (path, text) => editor.replaceText(path, text),
+  closed: () => editor.view.focus()
+})
 
 // ---------- 表示の小物 ----------
 
@@ -79,6 +119,7 @@ function clearPreview(): void {
 
 function updateDirty(): void {
   $('dirty').hidden = !editor.isDirty()
+  tabs.updateDirty()
 }
 
 function updateTitle(): void {
@@ -124,6 +165,7 @@ function markActiveFile(): void {
     li.classList.toggle('active', li.dataset.path === editor.path)
     li.classList.toggle('root', li.dataset.path === lastRoot)
   }
+  tabs.render()
 }
 
 // ---------- 開く・保存・組版 ----------
@@ -133,6 +175,7 @@ async function openFile(path: string, line?: number): Promise<void> {
     if (editor.isDirty()) await saveText()
     const text = await sumi.readFile(path)
     editor.open(path, text)
+    tabs.add(path)
     sumi.saveSettings({ file: path })
     updateTitle()
     updateDirty()
@@ -680,6 +723,85 @@ function togglePreview(): void {
   sumi.saveSettings({ preview: previewShown() })
 }
 
+// ---------- タブ・検索・履歴 ----------
+
+// 今のファイル以外も保存できるように（タブを閉じるときと、すべて置換のあと）
+async function savePath(path: string): Promise<void> {
+  if (path === editor.path) return saveText()
+  const text = editor.textOf(path)
+  if (text === null || !editor.isDirty(path)) return
+  await sumi.writeFile(path, text)
+  editor.markSaved(path, text)
+  tabs.updateDirty()
+}
+
+// 未保存なら保存してから閉じる。今のタブを閉じたら隣のタブを出す
+async function closeTab(path = editor.path): Promise<void> {
+  if (!path) return
+  const saved = editor.isDirty(path)
+  if (saved) await savePath(path)
+  const next = path === editor.path ? tabs.neighbor(path) : null
+  const active = path === editor.path
+  tabs.remove(path)
+  editor.close(path)
+  if (!active) return
+  if (next) {
+    await openFile(next).catch(() => tabs.remove(next))
+    return
+  }
+  sumi.saveSettings({ file: null })
+  updateTitle()
+  updateDirty()
+  markActiveFile()
+  updateChips()
+  if (saved && !path.endsWith('.bib')) sumi.requestBuild(path)
+}
+
+// ⌃Tab はメニューにもあるので、同じ押し下げで 2 回進まないようにする
+let lastKeyStep = 0
+
+async function stepTab(dir: 1 | -1, from: 'key' | 'menu'): Promise<void> {
+  const now = performance.now()
+  if (from === 'menu' && now - lastKeyStep < 150) return
+  if (from === 'key') lastKeyStep = now
+  // 消えたファイルのタブは外して、その先へ進む
+  for (let tries = tabs.paths.length; tries > 0; tries--) {
+    const next = tabs.step(editor.path, dir)
+    if (!next || next === editor.path) return
+    if (await openFile(next).then(() => true, () => false)) return
+    tabs.remove(next)
+  }
+}
+
+function setupTabs(): void {
+  // ⌃Tab / ⌃⇧Tab と ⇧⌘[ / ⇧⌘]。エディターより先に受け取る
+  window.addEventListener(
+    'keydown',
+    (e) => {
+      let dir: 1 | -1 | 0 = 0
+      if (e.ctrlKey && !e.metaKey && !e.altKey && e.key === 'Tab') dir = e.shiftKey ? -1 : 1
+      else if (e.metaKey && e.shiftKey && !e.ctrlKey && !e.altKey) {
+        if (e.code === 'BracketLeft' || e.key === '{' || e.key === '[') dir = -1
+        else if (e.code === 'BracketRight' || e.key === '}' || e.key === ']') dir = 1
+      }
+      if (!dir) return
+      e.preventDefault()
+      e.stopPropagation()
+      void stepTab(dir, 'key')
+    },
+    true
+  )
+}
+
+// すべて置換で書き換えた、開いているファイル。今のファイルは自動保存に任せ、ほかはすぐ保存する
+async function afterReplace(paths: string[]): Promise<void> {
+  for (const path of paths) if (path !== editor.path) await savePath(path)
+  updateDirty()
+  if (!editor.path) return
+  if (autoBuild) await saveText()
+  sumi.requestBuild(editor.path)
+}
+
 // ---------- メニューと外部の変更 ----------
 
 function handleMenu(command: string): void {
@@ -704,6 +826,17 @@ function handleMenu(command: string): void {
       return
     case 'settings':
       return openSettings()
+    case 'close-tab':
+      return void closeTab()
+    case 'next-tab':
+    case 'prev-tab':
+      return void stepTab(command === 'next-tab' ? 1 : -1, 'menu')
+    case 'find-in-folder':
+      if (folder) searchPanel.toggle(editor.selectionText())
+      return
+    case 'history':
+      if (editor.path) void historySheet.open(editor.path)
+      return
     case 'zoom-in':
       preview.setZoom(preview.zoom * 1.15)
       break
@@ -731,6 +864,9 @@ async function onFolderOpened(next: string, file: string | null): Promise<void> 
   setStatus('idle', 'status.idle')
   $('engine').textContent = ''
   await refreshFiles()
+  // 前に並べていたタブを戻す（このフォルダにあって、今もあるものだけ）
+  tabs.set((settings.tabs ?? []).filter((p) => files.includes(p)))
+  searchPanel.reset()
   updateTitle()
   const first = file ?? files.find((f) => f.endsWith('.tex'))
   if (first) await openFile(first)
@@ -753,6 +889,8 @@ function applyLanguage(): void {
   for (const el of document.querySelectorAll<HTMLElement>('[data-i18n-aria]')) el.setAttribute('aria-label', tr(el.dataset.i18nAria as Key))
   for (const el of document.querySelectorAll<HTMLInputElement>('[data-i18n-placeholder]')) el.placeholder = tr(el.dataset.i18nPlaceholder as Key)
   threads.applyLanguage()
+  searchPanel.applyLanguage()
+  tabs.render()
   $('status-text').textContent = tr(status.key, status.params)
   if (pdfNote) setPdfNote(pdfNote.key, pdfNote.params)
   renderProblems(false)
@@ -844,6 +982,7 @@ async function init(): Promise<void> {
   setupDivider()
   setAiWidth(initial.aiWidth)
   setupAi()
+  setupTabs()
 
   $('open-folder').addEventListener('click', () => void sumi.chooseFolder())
   $('toggle-preview').addEventListener('click', togglePreview)

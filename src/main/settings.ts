@@ -26,9 +26,11 @@ export interface Settings {
   agents: AgentConfig[]
   agent: string
   aiWidth: number
+  // エディターのタブに並べていたファイル（並びのとおり）。開いていたものは file に入る
+  tabs: string[]
 }
 
-const DEFAULTS: Settings = { folder: null, file: null, zoom: 1, auto: true, split: 0.5, sidebar: true, preview: true, theme: 'system', palette: 'paper', language: 'en', aiEnabled: true, ai: false, agents: DEFAULT_AGENTS, agent: 'claude', aiWidth: 440 }
+const DEFAULTS: Settings = { folder: null, file: null, zoom: 1, auto: true, split: 0.5, sidebar: true, preview: true, theme: 'system', palette: 'paper', language: 'en', aiEnabled: true, ai: false, agents: DEFAULT_AGENTS, agent: 'claude', aiWidth: 440, tabs: [] }
 
 function path(): string {
   return join(app.getPath('userData'), 'settings.json')
