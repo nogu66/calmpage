@@ -4,6 +4,20 @@ All notable changes to Calmpage are listed here. The format follows [Keep a Chan
 
 ## Unreleased
 
+### Added
+
+- Saving a `.bib`, `.sty`, or `.cls` file recompiles the document that uses it (found from latexmk’s records, `\bibliography` / `\addbibresource` / `\usepackage`, or the current root).
+- Stop a compile with File → Stop Compiling (⌘.) or *Stop* next to the status. The whole `latexmk` process group is stopped and pending compiles are dropped.
+- File → Remove Auxiliary Files runs `latexmk -c` with the same options as a compile, keeping the PDF and SyncTeX data.
+- `% !TEX program = …` and `% !TEX TS-program = …` choose the engine (pdfLaTeX, XeLaTeX, LuaLaTeX, upLaTeX, pLaTeX), ahead of `.latexmkrc`. A *Default engine* setting is used when neither is present.
+- An *Allow shell escape* setting (off by default) passes `-shell-escape` to `latexmk`.
+- A *Log* view next to the Problems list shows the `.log` and the `latexmk` output from the end, with search.
+- BibTeX and Biber warnings and errors appear in the Problems list, linked to the line in the `.bib` file.
+
+### Fixed
+
+- Warnings from files read with `\input` (such as undefined references) pointed at the root document instead of the file that caused them.
+
 ## 0.3.0 - 2026-10-23
 
 ### Changed
