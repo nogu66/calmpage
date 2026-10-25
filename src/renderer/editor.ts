@@ -221,4 +221,45 @@ export class Editor {
       })
     this.view.dispatch(setDiagnostics(this.view.state, diagnostics))
   }
+
+  // ---------- タブ・検索・履歴 ----------
+
+  // 一度でも開いて、中身を持っているファイル
+  loadedPaths(): string[] {
+    return [...this.docs.keys()]
+  }
+
+  // タブを閉じたファイルを docs から外す。今のファイルなら、何も書けない空の画面にする
+  close(path: string): void {
+    this.docs.delete(path)
+    if (path !== this.path) return
+    this.path = null
+    this.view.setState(EditorState.create({ extensions: [this.extensions(), EditorState.readOnly.of(true), EditorView.editable.of(false)] }))
+  }
+
+  // 置換や「この版に戻す」で中身を差し替える。取り消せるよう利用者の編集として扱い、変わった所だけを書き換える
+  replaceText(path: string, text: string): boolean {
+    const doc = this.docs.get(path)
+    if (!doc) return false
+    const state = path === this.path ? this.view.state : doc.state
+    const old = state.doc.toString()
+    if (old === text) return true
+    let from = 0
+    while (from < old.length && from < text.length && old[from] === text[from]) from++
+    let end = 0
+    while (end < old.length - from && end < text.length - from && old[old.length - 1 - end] === text[text.length - 1 - end]) end++
+    const spec = { changes: { from, to: old.length - end, insert: text.slice(from, text.length - end) }, userEvent: 'input.replace' }
+    if (path === this.path) this.view.dispatch(spec)
+    else doc.state = state.update(spec).state
+    return true
+  }
+
+  selectMatch(line: number, column: number, length: number): void {
+    const doc = this.view.state.doc
+    if (line < 1 || line > doc.lines) return
+    const from = Math.min(doc.line(line).from + column, doc.length)
+    const to = Math.min(from + length, doc.length)
+    this.view.dispatch({ selection: { anchor: from, head: to }, effects: EditorView.scrollIntoView(from, { y: 'center' }) })
+    this.view.focus()
+  }
 }

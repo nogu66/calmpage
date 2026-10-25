@@ -6,6 +6,8 @@ import type { ContentBlock, RequestPermissionRequest, SessionUpdate } from '@age
 import type { StartResult } from '../main/acp'
 import type { Settings } from '../main/settings'
 import type { RegistryAgent } from '../shared/agents'
+import type { SearchOptions, SearchResult } from '../shared/search'
+import type { Version } from '../main/history'
 
 // 閉じる前の片付け: auto は自動コンパイルなら保存、save は保存、discard は捨てる。残った（保存できなかった）ものを返す
 export type FlushMode = 'auto' | 'save' | 'discard'
@@ -50,6 +52,14 @@ const api = {
   acpAnswer: (key: string, optionId: string | null): void => ipcRenderer.send('acp:answer', key, optionId),
   openLink: (url: string): void => ipcRenderer.send('link:open', url),
   listRegistry: (): Promise<{ agents?: RegistryAgent[]; error?: string }> => ipcRenderer.invoke('registry:list'),
+  search: (query: string, opts: SearchOptions, overrides: Record<string, string>): Promise<SearchResult | { error: string } | null> =>
+    ipcRenderer.invoke('search:run', query, opts, overrides),
+  replaceInFolder: (query: string, opts: SearchOptions, replacement: string, exclude: string[]): Promise<{ files: number; count: number }> =>
+    ipcRenderer.invoke('search:replace', query, opts, replacement, exclude),
+  confirm: (message: string, detail: string, ok: string, cancel: string): Promise<boolean> =>
+    ipcRenderer.invoke('dialog:confirm', message, detail, ok, cancel),
+  listVersions: (path: string): Promise<Version[]> => ipcRenderer.invoke('history:list', path),
+  readVersion: (path: string, id: string): Promise<string> => ipcRenderer.invoke('history:read', path, id),
 
   // ファイル操作。失敗したら main がその場で知らせ、null を返す
   listEntries: (): Promise<ProjectEntries> => ipcRenderer.invoke('folder:entries'),

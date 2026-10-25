@@ -68,6 +68,8 @@ Calmpage is an [Electron](https://www.electronjs.org) app built with [electron-v
 | `src/main/templates/` | The templates for New Document… (bundled as strings with `?raw`) |
 | `src/shared/paths.ts` | Which files the file list shows, which open as text, and which trigger a recompile |
 | `src/renderer/drop.ts` | Dropping images on the editor (inserts a `figure` environment) |
+| `src/main/search.ts` | Searches and replaces across the project files without blocking the main process |
+| `src/main/history.ts` | Keeps a version of each file on every save, in `userData/history/` |
 | `src/main/settings.ts` | Reads and writes settings (only values you changed are stored) |
 | `src/main/acp.ts` | Starts ACP agents and relays threads, permission requests, and file reads/writes |
 | `src/main/terminals.ts` | Starts terminal agents with node-pty |
@@ -76,10 +78,15 @@ Calmpage is an [Electron](https://www.electronjs.org) app built with [electron-v
 | `src/preload/index.ts` | The bridge between the window and the main process |
 | `src/shared/agents.ts` | Agent settings and the built-in agents |
 | `src/shared/i18n.ts` | All UI text in English and Japanese |
+| `src/shared/search.ts` | The search pattern, matches, and replacement shared by the main process and the window |
 | `src/renderer/main.ts` | The window: wiring, status, problems, settings, AI panel |
 | `src/renderer/editor.ts` | The CodeMirror 6 editor |
 | `src/renderer/preview.ts` | The pdf.js viewer; renders visible pages (with their text and link layers) before swapping, so recompiles don't flicker. Also finds text in the PDF |
 | `src/renderer/pdf-bar.ts` | The bar above the PDF (page, zoom, view) and the find box |
+| `src/renderer/tabs.ts` | The editor tabs |
+| `src/renderer/search.ts` | Find and replace in the folder (sidebar) |
+| `src/renderer/history.ts` | The File History sheet |
+| `src/renderer/diff.ts` | Line diffs for the File History sheet |
 | `src/renderer/thread.ts` | The ACP thread view (replies, tool calls, diffs, permissions, plans) |
 | `src/renderer/terminal.ts` | The terminal view (xterm.js), themed to match the palette |
 | `src/renderer/style.css` | All styles; colors are CSS variables per palette and appearance |

@@ -32,9 +32,11 @@ export interface Settings {
   pdfInvert: boolean
   // 最近開いたフォルダ（新しい順）。ファイルのメニューの「最近使ったもの」に出す
   recent: string[]
+  // エディターのタブに並べていたファイル（並びのとおり）。開いていたものは file に入る
+  tabs: string[]
 }
 
-const DEFAULTS: Settings = { folder: null, file: null, zoom: 1, auto: true, split: 0.5, sidebar: true, preview: true, theme: 'system', palette: 'paper', language: 'en', aiEnabled: true, ai: false, agents: DEFAULT_AGENTS, agent: 'claude', aiWidth: 440, pdfView: 'width', pdfInvert: false, recent: [] }
+const DEFAULTS: Settings = { folder: null, file: null, zoom: 1, auto: true, split: 0.5, sidebar: true, preview: true, theme: 'system', palette: 'paper', language: 'en', aiEnabled: true, ai: false, agents: DEFAULT_AGENTS, agent: 'claude', aiWidth: 440, pdfView: 'width', pdfInvert: false, recent: [], tabs: [] }
 
 function path(): string {
   return join(app.getPath('userData'), 'settings.json')
