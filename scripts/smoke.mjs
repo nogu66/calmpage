@@ -417,6 +417,196 @@ await page.keyboard.press('Escape')
 const back = await page.locator('#toggle-ai').isVisible()
 check('AI パネルを使わない設定', agentsHidden && buttonHidden && menuItem?.visible === false && stillClosed && back, JSON.stringify({ agentsHidden, buttonHidden, menuItem, stillClosed, back }))
 
+// ---------- 班 3: PDF ----------
+const pdfScrollTop = () => page.evaluate(() => document.querySelector('#pdf-scroll').scrollTop)
+const savedSettings = () => JSON.parse(readFileSync(join(userData, 'settings.json'), 'utf8'))
+const compiled = async () => {
+  await page.waitForFunction(() => document.querySelector('#status').dataset.state === 'building', null, { timeout: 8000 }).catch(() => {})
+  await waitStatus(['ok', 'warning', 'error'])
+  await page.waitForTimeout(500)
+}
+
+// 組み直しても、差し替えた時点で、描いたページには文字とリンクの層もそろっている（ちらつかない）
+await page.evaluate(() => {
+  window.__swaps = []
+  new MutationObserver((records) => {
+    for (const r of records) {
+      for (const n of r.addedNodes) {
+        if (!n.classList?.contains('pages')) continue
+        const drawn = [...n.querySelectorAll('.page')].filter((p) => p.querySelector(':scope > canvas'))
+        window.__swaps.push({
+          drawn: drawn.length,
+          text: drawn.filter((p) => p.querySelector('.textLayer span')).length,
+          links: drawn.filter((p) => p.querySelector('.annotationLayer')).length
+        })
+      }
+    }
+  }).observe(document.querySelector('#pdf-scroll'), { childList: true })
+})
+await clickMenu('コンパイル')
+await compiled()
+const swaps = await page.evaluate(() => window.__swaps)
+check('PDF: 組み直しても層ごと差し替える', swaps.length > 0 && swaps.every((s) => s.drawn > 0 && s.text === s.drawn && s.links === s.drawn), JSON.stringify(swaps))
+
+// 文字の層: なぞって選び、⌘C でコピーできる
+await page.evaluate(() => (document.querySelector('#pdf-scroll').scrollTop = 0))
+const pdfWord = await page.locator('.page[data-page="1"] .textLayer span').nth(20).boundingBox()
+await page.mouse.move(pdfWord.x + 2, pdfWord.y + pdfWord.height / 2)
+await page.mouse.down()
+await page.mouse.move(pdfWord.x + 220, pdfWord.y + pdfWord.height / 2 + 30, { steps: 6 })
+await page.mouse.up()
+const pdfSelected = await page.evaluate(() => getSelection().toString())
+await page.keyboard.press('Meta+c')
+await page.waitForTimeout(200)
+const pdfCopied = await app.evaluate(({ clipboard }) => clipboard.readText())
+check('PDF: 文字を選んでコピー', pdfSelected.trim().length > 10 && pdfCopied === pdfSelected, JSON.stringify(pdfCopied.slice(0, 60)))
+await page.evaluate(() => getSelection().removeAllRanges())
+
+// リンク: 外のリンクは既定のブラウザへ（ここでは shell.openExternal を記録に差し替える）、文書の中のリンクはその場所へ
+await app.evaluate(({ shell }) => {
+  globalThis.__opened = []
+  globalThis.__openExternal = shell.openExternal
+  shell.openExternal = async (url) => void globalThis.__opened.push(url)
+})
+const pageUrl = page.url()
+const externalLink = page.locator('.annotationLayer .linkAnnotation a[data-url]').first()
+const externalUrl = await externalLink.getAttribute('data-url', { timeout: 3000 }).catch(() => null)
+if (externalUrl) await externalLink.click()
+await page.waitForTimeout(300)
+const openedUrls = await app.evaluate(() => globalThis.__opened)
+check('PDF: 外部のリンクをブラウザで開く', !!externalUrl && openedUrls.length === 1 && openedUrls[0] === externalUrl && page.url() === pageUrl, `${externalUrl} → ${JSON.stringify(openedUrls)}`)
+
+const internalLinks = page.locator('.annotationLayer [data-internal-link] a')
+const internalCount = await internalLinks.count()
+let jumped = null
+for (let i = internalCount - 1; i >= 0 && !jumped; i--) {
+  await page.evaluate(() => (document.querySelector('#pdf-scroll').scrollTop = 1e6))
+  await page.waitForTimeout(250)
+  const from = await pdfScrollTop()
+  await internalLinks.nth(i).click()
+  await page.waitForTimeout(300)
+  const to = await pdfScrollTop()
+  if (Math.abs(to - from) > 20) jumped = { from, to }
+}
+check('PDF: 文書の中のリンクで移動', internalCount > 0 && !!jumped, `${internalCount} 個 ${JSON.stringify(jumped)}`)
+
+// ⌘クリックはリンクより SyncTeX が先（行き先へは飛ばず、ソースへ移る）
+await page.evaluate(() => (document.querySelector('#pdf-scroll').scrollTop = 0))
+await page.waitForTimeout(250)
+const beforeMeta = await pdfScrollTop()
+await page.locator('.page[data-page="1"] .annotationLayer [data-internal-link] a').first().click({ modifiers: ['Meta'] })
+await page.waitForTimeout(800)
+const metaFile = await page.locator('#file-name').textContent()
+check('PDF: ⌘クリックはリンクより SyncTeX', (await pdfScrollTop()) === beforeMeta && metaFile !== file, `${file} → ${metaFile}`)
+await app.evaluate(({ shell }) => (shell.openExternal = globalThis.__openExternal))
+await page.locator(`#file-list li[data-path="${filePath}"]`).click()
+await compiled()
+
+// 検索: プレビューに焦点があるときの ⌘F。⏎ で次、⇧⏎ で前、Esc で閉じる
+await page.locator('#pdf-scroll').click({ position: { x: 6, y: 6 } })
+await page.keyboard.press('Meta+f')
+const findShown = await page.locator('#pdf-find').isVisible()
+const cmSearch = await page.locator('.cm-search').count()
+await page.keyboard.type('washi')
+const counted = await waitFor(() => /^1 \/ \d+$/.test(document.querySelector('#pdf-find-count').textContent), null, 5000)
+const findFirst = await page.locator('#pdf-find-count').textContent()
+const findMarked = await page.evaluate(() => (CSS.highlights.get('pdf-find')?.size ?? 0) + (CSS.highlights.get('pdf-find-current')?.size ?? 0))
+await page.keyboard.press('Enter')
+await page.waitForTimeout(200)
+const findSecond = await page.locator('#pdf-find-count').textContent()
+await page.keyboard.press('Shift+Enter')
+await page.waitForTimeout(200)
+const findBack = await page.locator('#pdf-find-count').textContent()
+await page.screenshot({ path: join(shots, '10-pdf-find.png') })
+await page.keyboard.press('Escape')
+const findClosed = (await page.locator('#pdf-find').isHidden()) && (await page.evaluate(() => CSS.highlights.get('pdf-find')?.size ?? 0)) === 0
+const findTotal = Number(findFirst.split('/')[1])
+check(
+  'PDF: ⌘F で検索し、次と前へ',
+  findShown && cmSearch === 0 && counted && findTotal >= 3 && findMarked >= findTotal && findSecond === `2 / ${findTotal}` && findBack === `1 / ${findTotal}` && findClosed,
+  `${findFirst} → ${findSecond} → ${findBack}, 色 ${findMarked}`
+)
+await page.locator('.cm-content').click()
+await clickMenu('PDF 内を検索')
+await page.waitForTimeout(200)
+const menuFind = (await page.locator('#pdf-find').isVisible()) && (await page.evaluate(() => document.activeElement?.id)) === 'pdf-find-input'
+await page.keyboard.press('Escape')
+check('PDF: メニューから検索を開く（⌥⌘F）', menuFind)
+
+// ページ: 12 ページの書類で、番号を入れて移り、← → でめくる。見えないページには層を作らない
+const longDoc = join(folder, 'smoke-long.tex')
+writeFileSync(longDoc, `\\documentclass{article}\n\\begin{document}\n${Array.from({ length: 12 }, (_, i) => `Page ${i + 1}.\\newpage`).join('\n')}\n\\end{document}\n`)
+const longItem = page.locator(`#file-list li[data-path="${longDoc}"]`)
+await longItem.waitFor({ timeout: 8000 })
+await waitStatus(['ok', 'warning', 'error'])
+await longItem.click()
+await page.waitForFunction(() => document.querySelectorAll('#pdf-scroll .page').length === 12, null, { timeout: 60_000 })
+await page.waitForTimeout(600)
+const lazy = await page.evaluate(() => ({ text: document.querySelectorAll('.textLayer').length, drawn: document.querySelectorAll('.page > canvas').length }))
+check('PDF: 見えないページには層を作らない', lazy.text > 0 && lazy.text < 12 && lazy.text === lazy.drawn, JSON.stringify(lazy))
+const pageLabel = async () => `${await page.locator('#pdf-page').inputValue()} ${await page.locator('#pdf-total').textContent()}`
+const firstLabel = await pageLabel()
+await page.locator('#pdf-page').fill('7')
+await page.locator('#pdf-page').press('Enter')
+await page.waitForTimeout(300)
+const typedLabel = await pageLabel()
+await page.keyboard.press('ArrowRight')
+await page.waitForTimeout(200)
+const rightLabel = await pageLabel()
+await page.keyboard.press('ArrowLeft')
+await page.keyboard.press('ArrowLeft')
+await page.waitForTimeout(200)
+const leftLabel = await pageLabel()
+check('PDF: ページ番号と移動', firstLabel === '1 / 12' && typedLabel === '7 / 12' && rightLabel === '8 / 12' && leftLabel === '6 / 12', [firstLabel, typedLabel, rightLabel, leftLabel].join(' → '))
+
+// 表示: ページ全体・見開き。拡大率を出し、選んだものは設定に残る
+const pdfLayout = () =>
+  page.evaluate(() => {
+    const scroller = document.querySelector('#pdf-scroll')
+    const [a, b] = [...document.querySelectorAll('#pdf-scroll .page')].map((p) => p.getBoundingClientRect())
+    return { zoom: document.querySelector('#pdf-zoom').textContent, room: scroller.clientHeight - 48, height: Math.round(a.height), sameRow: Math.round(a.top) === Math.round(b.top) && b.left > a.right }
+  })
+const widthView = await pdfLayout()
+await page.locator('#pdf-views button[data-value="page"]').click()
+await page.waitForTimeout(400)
+const pageView = await pdfLayout()
+await page.locator('#pdf-views button[data-value="spread"]').click()
+await page.waitForTimeout(400)
+const spreadView = await pdfLayout()
+const savedView = savedSettings().pdfView
+await page.screenshot({ path: join(shots, '11-pdf-spread.png') })
+await page.locator('#pdf-views button[data-value="width"]').click()
+await page.waitForTimeout(300)
+check(
+  'PDF: ページ全体と見開き、拡大率',
+  /^\d+%$/.test(widthView.zoom) && pageView.height <= pageView.room && spreadView.zoom !== widthView.zoom && spreadView.sameRow && !widthView.sameRow && savedView === 'spread' && savedSettings().pdfView === 'width',
+  JSON.stringify({ widthView, pageView, spreadView, savedView })
+)
+
+// ダークモードでの反転（既定は切）。暗いときだけ反転し、明るいときはそのまま
+await page.locator('#open-settings').click()
+const invertDefault = await page.locator('#settings-pdf-invert').isChecked()
+await page.locator('#settings-pdf-invert').click()
+await page.waitForTimeout(300)
+await page.keyboard.press('Escape')
+const canvasFilter = () => page.evaluate(() => getComputedStyle(document.querySelector('.page > canvas')).filter)
+await page.emulateMedia({ colorScheme: 'dark' })
+const darkFilter = await canvasFilter()
+await page.screenshot({ path: join(shots, '12-pdf-dark.png') })
+await page.emulateMedia({ colorScheme: 'light' })
+const lightFilter = await canvasFilter()
+await page.emulateMedia({ colorScheme: null })
+const invertSaved = savedSettings().pdfInvert
+await page.locator('#open-settings').click()
+await page.locator('#settings-pdf-invert').click()
+await page.waitForTimeout(300)
+await page.keyboard.press('Escape')
+check('PDF: ダークモードで反転', !invertDefault && /invert/.test(darkFilter) && lightFilter === 'none' && invertSaved === true && savedSettings().pdfInvert === false, `${darkFilter} / ${lightFilter}`)
+
+await page.locator(`#file-list li[data-path="${filePath}"]`).click()
+await compiled()
+unlinkSync(longDoc)
+
 check('コンソールにエラーなし', errors.length === 0, errors.slice(0, 3).join(' | '))
 await page.screenshot({ path: join(shots, '4-final.png') })
 await app.close()

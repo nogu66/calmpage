@@ -46,6 +46,8 @@ Calmpage is a LaTeX editor that stays out of your way. The name says what it aim
 - *Auto compile*: save and compile 1.2 seconds after you stop typing
 - Errors in the editor and in a Problems list
 - SyncTeX both ways: ⌘J shows the cursor in the PDF, ⌘-click in the PDF jumps to the source
+- A PDF viewer that works like one: clickable links (contents, `\ref`, `\cite`, URLs), text you can select and copy, search inside the PDF, page numbers, and fit width / whole page / two pages side by side
+- Optional dark pages: invert the PDF in dark mode (off by default)
 - Multi-file projects with `% !TEX root`, `.latexmkrc`, and automatic engine selection
 - Reloads and recompiles when another editor or an agent changes a file
 - Light, dark, or system appearance, with three palettes: Paper, Moss, and Sand
@@ -102,6 +104,9 @@ Open a folder (or a single `.tex` file) with ⌘O. Calmpage finds the root docum
 | Show or hide the PDF preview | ⇧⌘P, or the button at the right of the title bar |
 | AI panel | ⇧⌘L, or the button at the right of the title bar |
 | Zoom the PDF in / out / fit to width | ⌘= / ⌘- / ⌘0 |
+| Find in the PDF | ⌥⌘F, or ⌘F while the PDF has focus (⏎ next, ⇧⏎ previous) |
+| Previous / next page | ← / → while the PDF has focus, or type a number in the bar above the PDF |
+| Follow a link in the PDF | Click it (⌘-click still jumps to the source) |
 | Settings | ⌘, or the gear at the bottom left |
 | Open the PDF in Preview | ⇧⌘O |
 

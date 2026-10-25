@@ -4,6 +4,15 @@ All notable changes to Calmpage are listed here. The format follows [Keep a Chan
 
 ## Unreleased
 
+### Added
+
+- Links in the PDF work: contents, `\ref`, `\cite`, and hyperref links scroll to their target, and URLs open in your browser. ⌘-click still jumps to the source.
+- Select and copy text in the PDF.
+- Find in the PDF with ⌥⌘F, or ⌘F while the PDF has focus. Matches are marked, and ⏎ / ⇧⏎ move between them.
+- A quiet bar above the PDF shows the page (for example 3 / 12) and the zoom. Type a page number to go there, or turn pages with ← / →.
+- Fit width, whole page, or two pages side by side, from the bar or **Settings → PDF**. The choice is remembered.
+- **Settings → PDF → Dark pages in dark mode** inverts the PDF while the app is dark (off by default).
+
 ### Changed
 
 - New app icon: a half moon rising from the horizon on a sheet of paper, with its reflection drawn as lines of text.

@@ -151,7 +151,23 @@ const en = {
 
   'build.overfull': 'Overfull box ({amount})',
   'build.noPages': 'No pages of output.',
-  'build.noLatexmk': 'Cannot start latexmk: {detail}'
+  'build.noLatexmk': 'Cannot start latexmk: {detail}',
+
+  'pdf.page': 'Page (← → to turn)',
+  'pdf.zoomHint': 'Zoom (⌘= / ⌘- / ⌘0)',
+  'pdf.viewWidth': 'Fit width',
+  'pdf.viewPage': 'Whole page',
+  'pdf.viewSpread': 'Two pages',
+  'pdf.find': 'Find in PDF',
+  'pdf.findPrev': 'Previous (⇧⏎)',
+  'pdf.findNext': 'Next (⏎)',
+  'pdf.findClose': 'Close (Esc)',
+  'pdf.findNone': 'No results',
+  'menu.findPdf': 'Find in PDF',
+  'settings.pdf': 'PDF',
+  'settings.pdfView': 'View',
+  'settings.pdfInvert': 'Dark pages in dark mode',
+  'settings.pdfInvertHint': 'Inverts the PDF while Calmpage is dark. Hues are kept, so figures stay readable.'
 } satisfies Record<string, Entry>
 
 export type Key = keyof typeof en
@@ -300,7 +316,23 @@ const ja: Record<Key, Entry> = {
 
   'build.overfull': 'はみ出し ({amount})',
   'build.noPages': 'PDF が 1 ページも出力されませんでした',
-  'build.noLatexmk': 'latexmk を起動できません: {detail}'
+  'build.noLatexmk': 'latexmk を起動できません: {detail}',
+
+  'pdf.page': 'ページ（← → でめくる）',
+  'pdf.zoomHint': '拡大率（⌘= / ⌘- / ⌘0）',
+  'pdf.viewWidth': '幅に合わせる',
+  'pdf.viewPage': 'ページ全体',
+  'pdf.viewSpread': '見開き',
+  'pdf.find': 'PDF 内を検索',
+  'pdf.findPrev': '前へ (⇧⏎)',
+  'pdf.findNext': '次へ (⏎)',
+  'pdf.findClose': '閉じる (Esc)',
+  'pdf.findNone': '見つかりません',
+  'menu.findPdf': 'PDF 内を検索',
+  'settings.pdf': 'PDF',
+  'settings.pdfView': '表示',
+  'settings.pdfInvert': 'ダークモードでページを暗くする',
+  'settings.pdfInvertHint': 'Calmpage が暗い間、PDF の明暗を反転して表示します。色合いは保つので、図も読めます。'
 }
 
 const DICTS: Record<Lang, Record<Key, Entry>> = { en, ja }
