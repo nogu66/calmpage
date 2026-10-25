@@ -64,7 +64,10 @@ Calmpage is an [Electron](https://www.electronjs.org) app built with [electron-v
 | --- | --- |
 | `src/main/index.ts` | App entry: window, menus, IPC, settings changes |
 | `src/main/build.ts` | Runs `latexmk`, parses the log, and calls SyncTeX |
-| `src/main/files.ts` | Lists project files and watches for external changes |
+| `src/main/files.ts` | Lists project files, watches for external changes, and creates, renames, and copies files |
+| `src/main/templates/` | The templates for New Document… (bundled as strings with `?raw`) |
+| `src/shared/paths.ts` | Which files the file list shows, which open as text, and which trigger a recompile |
+| `src/renderer/drop.ts` | Dropping images on the editor (inserts a `figure` environment) |
 | `src/main/settings.ts` | Reads and writes settings (only values you changed are stored) |
 | `src/main/acp.ts` | Starts ACP agents and relays threads, permission requests, and file reads/writes |
 | `src/main/terminals.ts` | Starts terminal agents with node-pty |

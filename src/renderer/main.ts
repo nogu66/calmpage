@@ -2,8 +2,11 @@ import type { BuildResult, Diagnostic } from '../main/build'
 import type { ContentBlock } from '@agentclientprotocol/sdk'
 import type { AgentConfig, AgentKind, Settings } from '../main/settings'
 import { DEFAULT_AGENTS, LOGIN_SHELL, type RegistryAgent } from '../shared/agents'
-import type { SumiApi } from '../preload'
+import type { FlushMode, SumiApi, Unsaved } from '../preload'
+import type { TemplateId } from '../main/templates'
 import { t, type Key } from '../shared/i18n'
+import { isImage, isText } from '../shared/paths'
+import { droppedFiles, guardWindowDrop, insertFigures, onImageDrop } from './drop'
 import { Editor } from './editor'
 import { PdfBar } from './pdf-bar'
 import { Preview } from './preview'
@@ -23,6 +26,7 @@ const AUTO_BUILD_DELAY = 1200
 
 let folder: string | null = null
 let files: string[] = []
+let emptyDirs: string[] = []
 let diagnostics: Diagnostic[] = []
 let lastRoot: string | null = null
 let pdfPath: string | null = null
@@ -49,7 +53,7 @@ const threads = new ThreadPane($('ai-threads'), {
   relative,
   context: contextBlocks,
   contextSummary,
-  beforeSend: saveText
+  beforeSend: async () => void (await saveText())
 })
 
 // ---------- 表示の小物 ----------
@@ -82,8 +86,13 @@ function clearPreview(): void {
   updateChips()
 }
 
+let edited = false
+
 function updateDirty(): void {
   $('dirty').hidden = !editor.isDirty()
+  // 窓の閉じるボタンの点（macOS の未保存の印）。開いているどのファイルに未保存があっても付ける
+  const any = editor.dirtyPaths().length > 0
+  if (any !== edited) sumi.setEdited((edited = any))
 }
 
 function updateTitle(): void {
@@ -95,33 +104,259 @@ function updateTitle(): void {
 
 // ---------- ファイル一覧 ----------
 
+function dirOf(path: string): string {
+  return path.slice(0, path.lastIndexOf('/'))
+}
+
+// 名前の入力中に描き直すと入力欄が消えてしまうので、終わってから読み直す
+let naming = false
+let refreshPending = false
+
+// 一番上にフォルダ直下のファイル、続いてフォルダごとに見出しとファイルを並べる。空のフォルダも見出しだけ出す
 async function refreshFiles(): Promise<void> {
-  files = folder ? await sumi.listFiles() : []
+  if (naming) return void (refreshPending = true)
+  const entries = folder ? await sumi.listEntries() : { files: [], emptyDirs: [] }
+  if (naming) return void (refreshPending = true)
+  files = entries.files
+  emptyDirs = entries.emptyDirs
+  const groups = new Map<string, string[]>()
+  for (const path of files) {
+    const group = groups.get(dirOf(path)) ?? []
+    group.push(path)
+    groups.set(dirOf(path), group)
+  }
+  for (const d of emptyDirs) groups.set(d, [])
+  const dirs = [...groups.keys()].sort((a, b) => (a === folder ? -1 : b === folder ? 1 : a.localeCompare(b)))
   const list = $('file-list')
   list.replaceChildren()
-  let dir: string | null = null
-  for (const path of files) {
-    const rel = relative(path)
-    const d = rel.includes('/') ? rel.slice(0, rel.lastIndexOf('/')) : ''
-    if (d !== dir) {
-      dir = d
-      if (d) {
-        const head = document.createElement('li')
-        head.className = 'dir'
-        head.textContent = d
-        head.title = d
-        list.append(head)
-      }
+  for (const d of dirs) {
+    if (d !== folder) {
+      const head = element('li', 'dir', relative(d))
+      head.title = relative(d)
+      head.dataset.path = d
+      list.append(head)
     }
-    const li = document.createElement('li')
-    li.className = 'file'
-    li.dataset.path = path
-    li.textContent = baseName(path)
-    li.title = rel
-    li.addEventListener('click', () => void openFile(path))
-    list.append(li)
+    for (const path of groups.get(d) ?? []) {
+      const li = element('li', 'file', baseName(path))
+      li.dataset.path = path
+      li.title = relative(path)
+      li.addEventListener('click', () => void openFile(path))
+      list.append(li)
+    }
   }
   markActiveFile()
+}
+
+// ---------- ファイル操作（新規・名前の変更・ゴミ箱・ドロップ） ----------
+
+function listItem(path: string): HTMLElement | undefined {
+  return [...$('file-list').querySelectorAll<HTMLElement>('li[data-path]')].find((li) => li.dataset.path === path)
+}
+
+// 一覧の行をその場で入力欄に変えて、名前を聞く。Enter か欄の外を押すと決まり、Esc でやめる
+function askName(li: HTMLElement, initial: string): Promise<string | null> {
+  if (document.body.classList.contains('no-sidebar')) setSidebarShown(true)
+  naming = true
+  const before = [...li.childNodes]
+  const input = element('input', 'name-input')
+  input.value = initial
+  input.spellcheck = false
+  li.classList.add('naming')
+  li.replaceChildren(input)
+  li.scrollIntoView({ block: 'nearest' })
+  input.focus()
+  const dot = initial.lastIndexOf('.')
+  input.setSelectionRange(0, dot > 0 ? dot : initial.length)
+  return new Promise((resolve) => {
+    let done = false
+    const finish = (value: string | null): void => {
+      if (done) return
+      done = true
+      naming = false
+      li.classList.remove('naming')
+      li.replaceChildren(...before)
+      resolve(value?.trim() || null)
+      if (refreshPending) {
+        refreshPending = false
+        void refreshFiles()
+      }
+    }
+    input.addEventListener('keydown', (e) => {
+      e.stopPropagation()
+      if (e.key === 'Enter' && !e.isComposing) finish(input.value)
+      else if (e.key === 'Escape') finish(null)
+    })
+    input.addEventListener('blur', () => finish(input.value))
+  })
+}
+
+// 新しいファイルの置き場所: 今開いているファイルと同じフォルダ
+function defaultDir(): string | null {
+  return editor.path && folder && editor.path.startsWith(folder + '/') ? dirOf(editor.path) : folder
+}
+
+// 既にある名前なら番号を付けた候補を出す（作るときにも main が重なりを確かめる）
+function freshName(dir: string, kind: 'file' | 'folder'): string {
+  const taken = new Set([...files, ...emptyDirs, ...files.map(dirOf)])
+  // ファイル名は \input で書きやすいよう、どの言語でも英数字にする
+  const make = (i: number): string => (kind === 'file' ? `untitled${i > 1 ? `-${i}` : ''}.tex` : `${tr('file.untitledFolder')}${i > 1 ? ` ${i}` : ''}`)
+  let i = 1
+  while (taken.has(`${dir}/${make(i)}`)) i++
+  return make(i)
+}
+
+async function newEntry(kind: 'file' | 'folder', dir = defaultDir()): Promise<void> {
+  if (!folder || !dir) return openTemplates()
+  const li = element('li', kind === 'file' ? 'file' : 'dir')
+  const head = listItem(dir)
+  if (head && dir !== folder) head.after(li)
+  else $('file-list').prepend(li)
+  const name = await askName(li, freshName(dir, kind))
+  li.remove()
+  if (!name) return
+  const path = kind === 'file' ? await sumi.createFile(dir, name) : await sumi.createFolder(dir, name)
+  await refreshFiles()
+  if (path && kind === 'file' && isText(path)) await openFile(path)
+}
+
+// 名前を変えたファイルやフォルダの中を開いていたら、エディターと本体の記録も新しいパスへ移す
+function onMoved(from: string, to: string): void {
+  const move = (p: string): string => (p === from ? to : p.startsWith(from + '/') ? to + p.slice(from.length) : p)
+  const was = editor.path
+  editor.rename(from, to)
+  if (lastRoot) lastRoot = move(lastRoot)
+  if (editor.path && editor.path !== was) {
+    sumi.saveSettings({ file: editor.path })
+    updateTitle()
+    const target = buildTarget()
+    if (target) sumi.requestBuild(target)
+  }
+}
+
+async function renameEntry(path: string): Promise<void> {
+  const li = listItem(path)
+  if (!li) return
+  const name = await askName(li, baseName(path))
+  if (!name || name === baseName(path)) return
+  const to = await sumi.renamePath(path, name)
+  if (!to) return
+  onMoved(path, to)
+  await refreshFiles()
+}
+
+async function trashEntry(path: string): Promise<void> {
+  if (!(await sumi.trashPath(path))) return
+  const was = editor.path
+  editor.discard(path)
+  await refreshFiles()
+  if (was && !editor.path) {
+    const next = files.find((f) => f.endsWith('.tex'))
+    if (next) await openFile(next)
+    else {
+      updateTitle()
+      markActiveFile()
+    }
+  }
+  updateDirty()
+}
+
+// 右クリックのメニューで選んだ操作。target が null なら一覧のすき間（フォルダそのもの）
+function handleFileMenu(command: string, target: string | null, isDir: boolean): void {
+  const dir = target ? (isDir ? target : dirOf(target)) : folder
+  if (command === 'new-file') void newEntry('file', dir)
+  if (command === 'new-folder') void newEntry('folder', dir)
+  if (command === 'rename' && target) void renameEntry(target)
+  if (command === 'trash' && target) void trashEntry(target)
+}
+
+// ドロップしたファイルをフォルダに写す。dir を省くと、画像は図のフォルダへ、ほかはフォルダの直下へ
+async function importDropped(dropped: File[], dir?: string): Promise<string[]> {
+  const paths: string[] = []
+  for (const file of dropped) {
+    const src = sumi.pathForFile(file)
+    const path = src ? await sumi.importFile(src, dir) : await sumi.importData(file.name, new Uint8Array(await file.arrayBuffer()), dir)
+    if (path) paths.push(path)
+  }
+  return paths
+}
+
+// \includegraphics のパスは、組むときの場所（本体のフォルダ）から数える
+function figureRef(path: string): string {
+  const from = dirOf(lastRoot ?? editor.path ?? path).split('/')
+  const to = path.split('/')
+  let i = 0
+  while (i < from.length && i < to.length - 1 && from[i] === to[i]) i++
+  return [...Array<string>(from.length - i).fill('..'), ...to.slice(i)].join('/')
+}
+
+function setupFiles(): void {
+  const sidebar = $('sidebar')
+  sidebar.addEventListener('contextmenu', (e) => {
+    if (!folder || naming) return
+    e.preventDefault()
+    const li = (e.target as HTMLElement).closest<HTMLElement>('#file-list li[data-path]')
+    sumi.showFileMenu(li?.dataset.path ?? null, !!li?.classList.contains('dir'))
+  })
+  sumi.onFileMenu(handleFileMenu)
+  sumi.onFilesChanged(() => void refreshFiles())
+
+  guardWindowDrop()
+  onImageDrop((view, dropped, pos) => {
+    const path = editor.path
+    if (!folder || !path) return
+    void importDropped(dropped).then(async (paths) => {
+      // 写している間に別のファイルへ移ったら、入れない
+      if (editor.path === path) insertFigures(view, pos, paths.map(figureRef))
+      await refreshFiles()
+    })
+  })
+  // ファイル一覧に落とすと、落とした先のフォルダ（行ならその行のフォルダ）へ写す
+  sidebar.addEventListener('dragover', (e) => {
+    if (!folder || !e.dataTransfer?.types.includes('Files')) return
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'copy'
+    sidebar.classList.add('drop-target')
+  })
+  sidebar.addEventListener('dragleave', (e) => {
+    if (!sidebar.contains(e.relatedTarget as Node | null)) sidebar.classList.remove('drop-target')
+  })
+  sidebar.addEventListener('drop', (e) => {
+    e.preventDefault()
+    sidebar.classList.remove('drop-target')
+    const dropped = droppedFiles(e.dataTransfer)
+    const li = (e.target as HTMLElement).closest<HTMLElement>('#file-list li[data-path]')
+    const at = li?.dataset.path
+    if (!folder || !dropped.length) return
+    void importDropped(dropped, li && at ? (li.classList.contains('dir') ? at : dirOf(at)) : undefined).then(() => refreshFiles())
+  })
+}
+
+// ---------- 新しい書類（雛形） ----------
+
+function openTemplates(): void {
+  $('templates').hidden = false
+  $('templates').querySelector<HTMLElement>('[data-template]')?.focus()
+}
+
+function closeTemplates(): void {
+  $('templates').hidden = true
+}
+
+function setupTemplates(): void {
+  for (const b of $('templates').querySelectorAll<HTMLButtonElement>('[data-template]')) {
+    b.addEventListener('click', () => {
+      closeTemplates()
+      void sumi.createFromTemplate(b.dataset.template as TemplateId)
+    })
+  }
+  $('templates-close').addEventListener('click', closeTemplates)
+  $('templates').addEventListener('click', (e) => {
+    if (e.target === $('templates')) closeTemplates()
+  })
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && !$('templates').hidden) closeTemplates()
+  })
+  $('new-document').addEventListener('click', openTemplates)
 }
 
 function markActiveFile(): void {
@@ -134,8 +369,12 @@ function markActiveFile(): void {
 // ---------- 開く・保存・組版 ----------
 
 async function openFile(path: string, line?: number): Promise<void> {
+  // 画像と PDF は Quick Look で見る。エディターの書類はそのまま
+  if (isImage(path)) return sumi.quickLook(path)
   if (editor.path !== path) {
-    if (editor.isDirty()) await saveText()
+    // 保存できなかったら「保存 / 保存しない / キャンセル」を聞き、キャンセルならこのファイルに留まる
+    const current = editor.path
+    if (current && editor.isDirty() && !(await saveText()) && !(await sumi.confirmUnsaved([current], true))) return
     const text = await sumi.readFile(path)
     editor.open(path, text)
     sumi.saveSettings({ file: path })
@@ -144,24 +383,59 @@ async function openFile(path: string, line?: number): Promise<void> {
     markActiveFile()
     showEditorDiagnostics()
     updateChips()
-    if (!path.endsWith('.bib')) sumi.requestBuild(path)
+    if (path.endsWith('.tex')) sumi.requestBuild(path)
   }
   if (line) editor.goToLine(line)
 }
 
-async function saveText(): Promise<void> {
-  const path = editor.path
-  clearTimeout(autoTimer)
-  if (!path || !editor.isDirty()) return
-  const text = editor.text()
+async function writeDoc(path: string): Promise<void> {
+  const text = editor.textOf(path)
+  if (text === null) return
   await sumi.writeFile(path, text)
   editor.markSaved(path, text)
+}
+
+// 書けなければ false（未保存のまま残し、閉じるときなどに聞く）
+async function saveText(): Promise<boolean> {
+  const path = editor.path
+  clearTimeout(autoTimer)
+  if (!path || !editor.isDirty()) return true
+  const ok = await writeDoc(path).then(
+    () => true,
+    () => false
+  )
   updateDirty()
+  return ok
+}
+
+// .tex 以外（.bib や .sty、図のデータなど）を開いているときは、いまの本体を組み直す
+function buildTarget(): string | null {
+  const path = editor.path
+  return path?.endsWith('.tex') ? path : lastRoot
 }
 
 async function save(): Promise<void> {
   await saveText()
-  if (editor.path) sumi.requestBuild(editor.path)
+  const target = buildTarget()
+  if (target) sumi.requestBuild(target)
+}
+
+// main からの片付けの依頼（閉じる・終了する・フォルダを替える前）。残った（保存しなかった）ものを返す
+async function flush(mode: FlushMode, paths: string[] | null): Promise<Unsaved[]> {
+  clearTimeout(autoTimer)
+  const targets = editor.dirtyPaths().filter((p) => !paths || paths.includes(p))
+  if (mode === 'discard') {
+    for (const path of targets) editor.revert(path)
+    updateDirty()
+    return []
+  }
+  if (mode === 'auto' && !autoBuild) return targets.map((path) => ({ path, error: null }))
+  const left: Unsaved[] = []
+  for (const path of targets) {
+    await writeDoc(path).catch((err: unknown) => left.push({ path, error: err instanceof Error ? err.message : String(err) }))
+  }
+  updateDirty()
+  return left
 }
 
 function onEdit(): void {
@@ -799,8 +1073,25 @@ function handleMenu(command: string): void {
   switch (command) {
     case 'save':
       return void save()
-    case 'build':
-      if (editor.path) sumi.requestBuild(editor.path)
+    case 'build': {
+      const target = buildTarget()
+      if (target) sumi.requestBuild(target)
+      return
+    }
+    case 'new-file':
+      return void newEntry('file')
+    case 'new-folder':
+      return void newEntry('folder')
+    case 'new-document':
+      return openTemplates()
+    case 'rename':
+      if (editor.path) void renameEntry(editor.path)
+      return
+    case 'trash':
+      if (editor.path) void trashEntry(editor.path)
+      return
+    case 'reveal':
+      if (editor.path ?? folder) sumi.revealPath((editor.path ?? folder) as string)
       return
     case 'forward-sync':
       return void forwardSync()
@@ -855,11 +1146,13 @@ async function onFolderOpened(next: string, file: string | null): Promise<void> 
 }
 
 // ほかのエディターや AI が書き換えたら、開いている内容を読み直して組み直す。
-async function onFileChanged(path: string, content: string): Promise<void> {
+// 組み直すのはソース（.tex .bib .sty など）のときだけ。ほかのテキストは読み直すだけ
+async function onFileChanged(path: string, content: string, source = true): Promise<void> {
   if (!files.includes(path)) await refreshFiles()
   editor.reloadFromDisk(path, content)
   if (path === editor.path) showEditorDiagnostics()
-  if (editor.path) sumi.requestBuild(editor.path)
+  const target = buildTarget()
+  if (source && target) sumi.requestBuild(target)
 }
 
 // ---------- 設定と言語 ----------
@@ -976,11 +1269,15 @@ async function init(): Promise<void> {
 
   sumi.onMenu(handleMenu)
   sumi.onFolderOpened((f, file) => void onFolderOpened(f, file))
-  sumi.onFileChanged((p, c) => void onFileChanged(p, c))
+  sumi.onFileChanged((p, c, source) => void onFileChanged(p, c, source))
   sumi.onBuildStarted(onBuildStarted)
   sumi.onBuildFinished((r, f, err) => void onBuildFinished(r, f, err))
 
+  // 閉じる前の保存は main が close と before-quit で聞きに来る。ここは開発中の再読み込みなどへの備え
   window.addEventListener('beforeunload', () => void saveText())
+  sumi.onFlush(flush)
+  setupFiles()
+  setupTemplates()
 
   if (initial.folder) await onFolderOpened(initial.folder, initial.file && initial.file.startsWith(initial.folder) ? initial.file : null)
   else updateTitle()

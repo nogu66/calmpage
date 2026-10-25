@@ -73,7 +73,8 @@ function engineArgs(engine: Engine): string[] {
     case 'pdflatex':
       return ['-pdf']
     case 'uplatex':
-      return ['-pdfdvi', '-latex=uplatex', '-bibtex=upbibtex', '-e', "$dvipdf='dvipdfmx %O -o %D %S'"]
+      // latexmk には -bibtex= という指定がないので、upbibtex は -e で渡す
+      return ['-pdfdvi', '-latex=uplatex', '-e', "$bibtex='upbibtex %O %S'", '-e', "$dvipdf='dvipdfmx %O -o %D %S'"]
   }
 }
 

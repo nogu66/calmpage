@@ -30,9 +30,11 @@ export interface Settings {
   // PDF の表示（幅に合わせる・ページ全体・見開き）と、ダークモードで PDF を反転するか
   pdfView: PdfView
   pdfInvert: boolean
+  // 最近開いたフォルダ（新しい順）。ファイルのメニューの「最近使ったもの」に出す
+  recent: string[]
 }
 
-const DEFAULTS: Settings = { folder: null, file: null, zoom: 1, auto: true, split: 0.5, sidebar: true, preview: true, theme: 'system', palette: 'paper', language: 'en', aiEnabled: true, ai: false, agents: DEFAULT_AGENTS, agent: 'claude', aiWidth: 440, pdfView: 'width', pdfInvert: false }
+const DEFAULTS: Settings = { folder: null, file: null, zoom: 1, auto: true, split: 0.5, sidebar: true, preview: true, theme: 'system', palette: 'paper', language: 'en', aiEnabled: true, ai: false, agents: DEFAULT_AGENTS, agent: 'claude', aiWidth: 440, pdfView: 'width', pdfInvert: false, recent: [] }
 
 function path(): string {
   return join(app.getPath('userData'), 'settings.json')

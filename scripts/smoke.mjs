@@ -607,6 +607,253 @@ await page.locator(`#file-list li[data-path="${filePath}"]`).click()
 await compiled()
 unlinkSync(longDoc)
 
+// ---------- 班 4: ファイル操作 ----------
+{
+  const fs = await import('node:fs')
+  const { basename, dirname } = await import('node:path')
+  const PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=='
+  const listedPaths = () => page.evaluate(() => [...document.querySelectorAll('#file-list li[data-path]')].map((li) => li.dataset.path))
+  const editorText = () => page.evaluate(() => document.querySelector('.cm-content').innerText)
+  const fileName = () => page.locator('#file-name').textContent()
+  const item = (path) => page.locator(`#file-list li[data-path="${path}"]`)
+  // ネイティブのダイアログは開けないので、main の dialog を差し替えて、出た文言を記録する
+  const stubMessages = (responses) =>
+    app.evaluate(({ dialog }, responses) => {
+      globalThis.__messages = []
+      dialog.showMessageBox = async (a, b) => {
+        globalThis.__messages.push((b ?? a).message)
+        return { response: responses.shift() ?? 2, checkboxChecked: false }
+      }
+    }, responses)
+  const messages = () => app.evaluate(() => globalThis.__messages ?? [])
+  // 右クリックのメニューも開けないので、出そうとした項目を記録し、名前で押せるようにする
+  await app.evaluate(({ Menu }) => {
+    Menu.prototype.popup = function () {
+      globalThis.__popup = this
+    }
+  })
+  const popupLabels = () => app.evaluate(() => globalThis.__popup?.items.map((i) => i.label) ?? [])
+  const clickPopup = (label) => app.evaluate(({ BrowserWindow }, label) => globalThis.__popup.items.find((i) => i.label === label).click(undefined, BrowserWindow.getAllWindows()[0]), label)
+  const mainTex = filePath
+  await page.locator(`#file-list li[data-path="${mainTex}"]`).click()
+
+  // 1. 画像や .csv / .md も一覧に出す。組んだ PDF（同じ名前の .tex がある）と、中身のないフォルダの扱い
+  const figures = join(folder, 'figures')
+  fs.mkdirSync(figures, { recursive: true })
+  const plot = join(figures, 'plot.png')
+  fs.writeFileSync(plot, Buffer.from(PNG, 'base64'))
+  const csv = join(folder, 'data.csv')
+  fs.writeFileSync(csv, 'x,y\n1,2\n')
+  const notes = join(folder, 'notes.md')
+  fs.writeFileSync(notes, '# Notes\n')
+  const builtPdf = join(folder, `${base}.pdf`)
+  const hadPdf = fs.existsSync(builtPdf)
+  if (!hadPdf) fs.writeFileSync(builtPdf, '%PDF-1.4\n')
+  fs.mkdirSync(join(folder, 'empty-dir'))
+  const shownAll = await waitFor(([p, c, n, e]) => {
+    const paths = [...document.querySelectorAll('#file-list li[data-path]')].map((li) => li.dataset.path)
+    return [p, c, n, e].every((x) => paths.includes(x))
+  }, [plot, csv, notes, join(folder, 'empty-dir')], 8000)
+  const listed = await listedPaths()
+  check('関連ファイルも一覧に出す', shownAll && !listed.includes(builtPdf), listed.map((p) => p.slice(folder.length + 1)).join(', '))
+  if (!hadPdf) fs.unlinkSync(builtPdf)
+
+  // 2. .tex 以外のテキストを開いて書ける。外部で変わったら読み直すが、組み直さない
+  await item(notes).click()
+  await page.waitForFunction(() => document.querySelector('#file-name').textContent === 'notes.md', null, { timeout: 5000 }).catch(() => {})
+  const openedMd = (await fileName()) === 'notes.md' && (await editorText()).includes('# Notes')
+  await page.evaluate(() => {
+    window.__built = false
+    new MutationObserver(() => {
+      if (document.querySelector('#status').dataset.state === 'building') window.__built = true
+    }).observe(document.querySelector('#status'), { attributes: true })
+  })
+  fs.writeFileSync(notes, '# Notes\n\nChanged outside.\n')
+  const reloaded = await waitFor(() => document.querySelector('.cm-content').innerText.includes('Changed outside.'), null, 5000)
+  await page.waitForTimeout(1200)
+  const builtOnMd = await page.evaluate(() => window.__built)
+  check('.md を開いて外部の変更を読み直す（組み直さない）', openedMd && reloaded && !builtOnMd, JSON.stringify({ openedMd, reloaded, builtOnMd }))
+
+  // 3. 画像を押すと Quick Look で見る（エディターの書類はそのまま）
+  await app.evaluate(({ BrowserWindow }) => {
+    BrowserWindow.getAllWindows()[0].previewFile = (path) => (globalThis.__quickLook = path)
+  })
+  await item(plot).click()
+  await page.waitForTimeout(300)
+  const looked = await app.evaluate(() => globalThis.__quickLook)
+  check('画像は Quick Look で見る', looked === plot && (await fileName()) === 'notes.md', looked)
+
+  // 4. エディターに画像を落とすと、図のフォルダに写して figure 環境を入れる（ブラウザから運んだ、パスのない画像）
+  await page.evaluate(async (png) => {
+    const bytes = Uint8Array.from(atob(png), (c) => c.charCodeAt(0))
+    const dt = new DataTransfer()
+    dt.items.add(new File([bytes], 'Drop Shot.png', { type: 'image/png' }))
+    const line = [...document.querySelectorAll('.cm-line')].pop().getBoundingClientRect()
+    const at = { clientX: line.left + 20, clientY: line.top + line.height / 2, bubbles: true, cancelable: true, dataTransfer: dt }
+    const target = document.querySelector('.cm-content')
+    target.dispatchEvent(new DragEvent('dragover', at))
+    target.dispatchEvent(new DragEvent('drop', at))
+  }, PNG)
+  const dropped = join(figures, 'Drop Shot.png')
+  const inserted = await waitFor(() => /\\includegraphics\[width=0\.8\\linewidth\]\{figures\/Drop Shot\.png\}/.test(document.querySelector('.cm-content').innerText), null, 5000)
+  const text = await editorText()
+  check('エディターへの画像のドロップ', inserted && fs.existsSync(dropped) && /\\label\{fig:drop-shot\}/.test(text) && /\\caption\{\}/.test(text), text.split('\n').slice(-7).join(' / '))
+  // プロジェクトの外のファイルは写す（Finder からのドロップと同じ道筋）
+  const outsideImage = join(mkdtempSync(join(tmpdir(), 'calmpage-image-')), 'outside.png')
+  fs.writeFileSync(outsideImage, Buffer.from(PNG, 'base64'))
+  const imported = await page.evaluate((src) => window.sumi.importFile(src), outsideImage)
+  const insideAgain = await page.evaluate((src) => window.sumi.importFile(src), plot)
+  check('外のファイルは図のフォルダへ写す', imported === join(figures, 'outside.png') && fs.existsSync(imported) && insideAgain === plot, `${imported} / ${insideAgain}`)
+
+  // 5. 閉じるときの保存: 自動コンパイルを切って未保存があれば聞く。キャンセルなら ⌘Q も窓を閉じるのも止まる
+  await page.evaluate(() => window.sumi.updateSettings({ auto: false }))
+  await page.waitForFunction(() => !document.querySelector('#auto').checked)
+  await page.locator('.cm-content').click()
+  await page.keyboard.press('Meta+ArrowDown')
+  await page.keyboard.type('\nunsaved-edit')
+  await page.waitForTimeout(300)
+  const dot = await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].isDocumentEdited())
+  await stubMessages([2, 2])
+  await app.evaluate(({ app }) => app.quit())
+  await page.waitForTimeout(800)
+  await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].close())
+  await page.waitForTimeout(800)
+  const alive = await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().length)
+  const asked = await messages()
+  check('未保存なら ⌘Q と窓を閉じるで聞き、キャンセルで留まる', dot && alive === 1 && asked.length === 2 && asked.every((m) => m.includes('notes.md')), `点 ${dot} / 窓 ${alive} / ${asked.join(' | ')}`)
+
+  // 「保存」で書き、点が消える。「保存しない」で捨てる
+  await stubMessages([0])
+  const savedOk = await page.evaluate(() => window.sumi.confirmUnsaved(null))
+  const savedText = fs.readFileSync(notes, 'utf8')
+  const dotAfterSave = await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].isDocumentEdited())
+  await page.keyboard.type(' discard-me')
+  await page.waitForTimeout(200)
+  await stubMessages([1])
+  const discardOk = await page.evaluate(() => window.sumi.confirmUnsaved(null))
+  const afterDiscard = await editorText()
+  check(
+    '「保存」と「保存しない」',
+    savedOk && savedText.includes('unsaved-edit') && !dotAfterSave && discardOk && !fs.readFileSync(notes, 'utf8').includes('discard-me') && !afterDiscard.includes('discard-me'),
+    JSON.stringify({ savedOk, dotAfterSave, discardOk })
+  )
+  // 自動コンパイルなら黙って保存する（入力が止まる前でも）
+  await page.evaluate(() => window.sumi.updateSettings({ auto: true }))
+  await page.waitForFunction(() => document.querySelector('#auto').checked)
+  await stubMessages([])
+  await page.keyboard.type(' auto-saved')
+  const autoOk = await page.evaluate(() => window.sumi.confirmUnsaved(null))
+  check('自動コンパイルなら聞かずに保存', autoOk && (await messages()).length === 0 && fs.readFileSync(notes, 'utf8').includes('auto-saved'))
+
+  // 6. ⌘N で新しいファイル（一覧の中で名前を入れる）
+  await item(mainTex).click()
+  await waitStatus(['ok', 'warning', 'error'])
+  await clickMenu('新規ファイル')
+  const input = page.locator('#file-list .name-input')
+  await input.waitFor({ timeout: 5000 })
+  const suggested = await input.inputValue()
+  await page.screenshot({ path: join(shots, 'files-new-file.png') })
+  await input.fill('chapter.tex')
+  await input.press('Enter')
+  const chapter = join(dirname(mainTex), 'chapter.tex')
+  await page.waitForFunction(() => document.querySelector('#file-name').textContent.endsWith('chapter.tex'), null, { timeout: 5000 }).catch(() => {})
+  check('新規ファイル', suggested === 'untitled.tex' && fs.existsSync(chapter) && (await fileName()).endsWith('chapter.tex'), `${suggested} → ${await fileName()}`)
+
+  // 7. 右クリック → 名前を変更。開いているファイルなら、エディターも新しい名前に移る
+  await item(chapter).click({ button: 'right' })
+  await page.waitForTimeout(200)
+  const labels = await popupLabels()
+  await clickPopup('名前を変更…')
+  await input.waitFor({ timeout: 5000 })
+  await page.keyboard.type('chapter-one')
+  await page.keyboard.press('Enter')
+  const renamed = join(dirname(chapter), 'chapter-one.tex')
+  await item(renamed).waitFor({ timeout: 5000 }).catch(() => {})
+  check(
+    '右クリックで名前を変更',
+    labels.join(',') === '新規ファイル,新規フォルダ,,名前を変更…,ゴミ箱に入れる,,Finder で表示' && fs.existsSync(renamed) && !fs.existsSync(chapter) && (await fileName()).endsWith('chapter-one.tex'),
+    `${labels.join(',')} / ${await fileName()}`
+  )
+
+  // 8. ゴミ箱に入れる（本物のゴミ箱は使わず消すだけ）。開いていたら別の書類に移る
+  await app.evaluate(({ shell }) => {
+    shell.trashItem = async (path) => process.getBuiltinModule('node:fs').rmSync(path, { recursive: true })
+  })
+  await item(renamed).click({ button: 'right' })
+  await page.waitForTimeout(200)
+  await clickPopup('ゴミ箱に入れる')
+  await page.waitForFunction((p) => !document.querySelector(`#file-list li[data-path="${p}"]`), renamed, { timeout: 5000 }).catch(() => {})
+  check('ゴミ箱に入れる', !fs.existsSync(renamed) && !(await fileName()).endsWith('chapter-one.tex') && (await fileName()) !== '', await fileName())
+
+  // 9. 新規フォルダ（空でも見出しが出る）と、一覧のフォルダへのドロップ
+  await clickMenu('新規フォルダ')
+  await input.waitFor({ timeout: 5000 })
+  await input.fill('tables')
+  await input.press('Enter')
+  const tables = join(folder, 'tables')
+  const head = await waitFor((p) => !!document.querySelector(`#file-list li.dir[data-path="${p}"]`), tables, 5000)
+  await page.evaluate((p) => {
+    const dt = new DataTransfer()
+    dt.items.add(new File(['a,b\n'], 'table.csv', { type: 'text/csv' }))
+    const target = document.querySelector(`#file-list li.dir[data-path="${p}"]`)
+    target.dispatchEvent(new DragEvent('dragover', { bubbles: true, cancelable: true, dataTransfer: dt }))
+    target.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: dt }))
+  }, tables)
+  const tableCsv = join(tables, 'table.csv')
+  const copied = await waitFor((p) => !!document.querySelector(`#file-list li[data-path="${p}"]`), tableCsv, 5000)
+  check('新規フォルダとファイル一覧へのドロップ', fs.statSync(tables).isDirectory() && head && copied && fs.existsSync(tableCsv), JSON.stringify({ head, copied }))
+
+  // 10. 新しい書類…: 空でないフォルダは断り、空のフォルダに雛形を置いて開き、コンパイルする
+  await clickMenu('新しい書類…')
+  const sheet = await page.locator('#templates').isVisible()
+  const choices = await page.locator('#templates [data-template]').count()
+  await page.screenshot({ path: join(shots, 'files-templates.png') })
+  await app.evaluate(({ dialog }, dir) => {
+    dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [dir] })
+  }, folder)
+  await stubMessages([0])
+  await page.locator('#templates [data-template="article"]').click()
+  await page.waitForTimeout(800)
+  const refused = (await messages()).some((m) => m.includes('空ではありません')) && (await page.locator('#folder-name').textContent()) === basename(folder)
+  const fresh = join(mkdtempSync(join(tmpdir(), 'calmpage-new-')), 'paper')
+  fs.mkdirSync(fresh)
+  await app.evaluate(({ dialog }, dir) => {
+    dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [dir] })
+  }, fresh)
+  await clickMenu('新しい書類…')
+  await page.locator('#templates [data-template="article"]').click()
+  await page.waitForFunction((name) => document.querySelector('#folder-name').textContent === name, 'paper', { timeout: 8000 }).catch(() => {})
+  const templateState = await waitStatus(['ok', 'warning', 'error'])
+  check(
+    '新しい書類（雛形）',
+    sheet && choices === 6 && refused && fs.existsSync(join(fresh, 'main.tex')) && fs.existsSync(join(fresh, 'references.bib')) && (await fileName()) === 'main.tex' && templateState !== 'error',
+    `${choices} 種類 / ${templateState} / ${await page.locator('#status-text').textContent()}`
+  )
+  await page.screenshot({ path: join(shots, 'files-new-document.png') })
+
+  // 11. 最近使ったもの: 設定に残り、メニューから元のフォルダに戻れる
+  const recentMenu = () =>
+    app.evaluate(({ Menu }) => {
+      const find = (items) => {
+        for (const i of items) {
+          if (i.label === '最近使ったもの') return i
+          const s = i.submenu && find(i.submenu.items)
+          if (s) return s
+        }
+      }
+      return find(Menu.getApplicationMenu().items)?.submenu.items.map((i) => i.label) ?? []
+    })
+  const recent = await recentMenu()
+  const stored = JSON.parse(fs.readFileSync(join(userData, 'settings.json'), 'utf8')).recent ?? []
+  await clickMenu(basename(folder))
+  const back = await waitFor((name) => document.querySelector('#folder-name').textContent === name, basename(folder), 8000)
+  await waitStatus(['ok', 'warning', 'error'])
+  check('最近使ったもの', recent[0] === 'paper' && recent.includes(basename(folder)) && stored[0] === fresh && stored.includes(folder) && back, `${recent.join(', ')} / ${stored.length} 件`)
+
+  for (const path of [csv, notes, dropped, join(figures, 'outside.png'), plot, tableCsv]) fs.rmSync(path, { force: true })
+  for (const dir of [tables, join(folder, 'empty-dir')]) fs.rmSync(dir, { recursive: true, force: true })
+}
+
 check('コンソールにエラーなし', errors.length === 0, errors.slice(0, 3).join(' | '))
 await page.screenshot({ path: join(shots, '4-final.png') })
 await app.close()

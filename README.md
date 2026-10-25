@@ -50,6 +50,12 @@ Calmpage is a LaTeX editor that stays out of your way. The name says what it aim
 - Optional dark pages: invert the PDF in dark mode (off by default)
 - Multi-file projects with `% !TEX root`, `.latexmkrc`, and automatic engine selection
 - Reloads and recompiles when another editor or an agent changes a file
+- Never loses your work: unsaved changes are written before you quit, close the window, or switch folders. If saving fails, or *Auto compile* is off, you get the usual Save / Don't Save / Cancel
+- Manage files from the file list (right-click) or the File menu: new file, new folder, rename, move to trash, show in Finder
+- The file list also shows images and other project files (`.csv`, `.md`, `.bbx`, `.dtx`, …). Text files open in the editor; images and PDFs open in Quick Look
+- Drop an image on the editor to copy it into the project (`figures/` or your existing image folder) and insert a `figure` environment. Drop files on the file list to copy them into a folder
+- Start a new document from a template: paper, Japanese paper (LuaLaTeX or upLaTeX), beamer slides, report, or letter
+- Recently opened folders in File → Open Recent
 - Light, dark, or system appearance, with three palettes: Paper, Moss, and Sand
 - English and Japanese interface
 
@@ -95,6 +101,10 @@ Open a folder (or a single `.tex` file) with ⌘O. Calmpage finds the root docum
 | Action | Shortcut |
 | --- | --- |
 | Open a folder or `.tex` file | ⌘O |
+| New file | ⌘N |
+| New document from a template | ⇧⌘N |
+| New folder | ⌥⌘N |
+| Rename, move to trash, show in Finder | Right-click in the file list |
 | Save and compile | ⌘S (automatic with *Auto compile*) |
 | Compile | ⌘R |
 | Show the cursor position in the PDF | ⌘J |
