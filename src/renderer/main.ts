@@ -5,6 +5,7 @@ import { DEFAULT_AGENTS, LOGIN_SHELL, type RegistryAgent } from '../shared/agent
 import type { SumiApi } from '../preload'
 import { t, type Key } from '../shared/i18n'
 import { Editor } from './editor'
+import { PdfBar } from './pdf-bar'
 import { Preview } from './preview'
 import { TerminalPane } from './terminal'
 import { ThreadPane } from './thread'
@@ -36,7 +37,11 @@ let pdfNote: { key: Key; params: Record<string, string | number> } | null = null
 const tr = (key: Key, params?: Record<string, string | number>): string => t(settings?.language ?? 'en', key, params)
 
 const editor = new Editor($('editor'), onEdit, () => updateChips())
-const preview = new Preview($('pdf-scroll'), (page, x, y) => void backwardSync(page, x, y))
+const preview = new Preview($('pdf-scroll'), (page, x, y) => void backwardSync(page, x, y), {
+  openLink: (url) => sumi.openLink(url),
+  onChange: () => pdfBar.update()
+})
+const pdfBar = new PdfBar(preview, { sumi, tr, show: showPreview })
 const terminals = new TerminalPane($('ai-terms'), sumi, () => ({ exited: tr('ai.exited') }))
 const threads = new ThreadPane($('ai-threads'), {
   sumi,
@@ -680,6 +685,13 @@ function togglePreview(): void {
   sumi.saveSettings({ preview: previewShown() })
 }
 
+// 閉じていたら開き、今の幅で描き直す
+function showPreview(): void {
+  if (previewShown()) return
+  togglePreview()
+  preview.setZoom(preview.zoom)
+}
+
 // ---------- メニューと外部の変更 ----------
 
 function handleMenu(command: string): void {
@@ -711,8 +723,11 @@ function handleMenu(command: string): void {
       preview.setZoom(preview.zoom / 1.15)
       break
     case 'zoom-reset':
+      sumi.updateSettings({ pdfView: 'width' })
       preview.setZoom(1)
       break
+    case 'find-pdf':
+      return pdfBar.openFind()
   }
   sumi.saveSettings({ zoom: preview.zoom })
 }
@@ -757,6 +772,7 @@ function applyLanguage(): void {
   if (pdfNote) setPdfNote(pdfNote.key, pdfNote.params)
   renderProblems(false)
   updateChips()
+  pdfBar.update()
 }
 
 // main から届いた設定を画面に映す（メニューと設定画面のどちらで変えてもここを通る）
@@ -772,13 +788,14 @@ function applySettings(next: Settings): void {
   $<HTMLInputElement>('settings-ai').checked = next.aiEnabled
   document.body.classList.toggle('ai-off', !next.aiEnabled)
   for (const group of document.querySelectorAll<HTMLElement>('[data-setting]')) {
-    const value = next[group.dataset.setting as 'language' | 'theme' | 'palette']
+    const value = next[group.dataset.setting as 'language' | 'theme' | 'palette' | 'pdfView']
     for (const button of group.querySelectorAll<HTMLButtonElement>('button')) {
       button.setAttribute('aria-pressed', String(button.dataset.value === value))
     }
   }
   if (languageChanged) applyLanguage()
   terminals.applyTheme()
+  pdfBar.apply(next)
 
   // 設定を変えた・消したエージェントは画面からも片付ける（main 側では止めてある）
   let agentsChanged = false

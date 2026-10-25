@@ -206,6 +206,7 @@ function buildMenu(): void {
           { label: tr('menu.zoomIn'), accelerator: 'CmdOrCtrl+=', click: command('zoom-in') },
           { label: tr('menu.zoomOut'), accelerator: 'CmdOrCtrl+-', click: command('zoom-out') },
           { label: tr('menu.zoomReset'), accelerator: 'CmdOrCtrl+0', click: command('zoom-reset') },
+          { label: tr('menu.findPdf'), accelerator: 'CmdOrCtrl+Alt+F', click: command('find-pdf') },
           { type: 'separator' },
           { label: tr('menu.theme'), submenu: [themeItem('system'), themeItem('light'), themeItem('dark')] },
           { label: tr('menu.palette'), submenu: [paletteItem('paper'), paletteItem('moss'), paletteItem('sand')] },
@@ -290,7 +291,8 @@ function registerIpc(): void {
     }
   })
   ipcMain.on('link:open', (_e, url: string) => {
-    if (/^https?:\/\//.test(url)) void shell.openExternal(url)
+    // PDF の中のリンクもここを通る。開くのは Web とメールだけ（file: などは開かない）
+    if (/^(https?:\/\/|mailto:)/i.test(url)) void shell.openExternal(url)
   })
 }
 

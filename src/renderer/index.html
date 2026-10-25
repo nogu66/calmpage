@@ -63,7 +63,36 @@
       <div id="divider" data-i18n-title="divider.hint"></div>
 
       <section id="preview-col">
-        <div id="pdf-scroll"></div>
+        <div id="pdf-bar">
+          <label class="pdf-pages" data-i18n-title="pdf.page">
+            <input id="pdf-page" inputmode="numeric" autocomplete="off" spellcheck="false" data-i18n-aria="pdf.page" />
+            <span id="pdf-total"></span>
+          </label>
+          <span id="pdf-zoom" data-i18n-title="pdf.zoomHint"></span>
+          <div class="segmented pdf-views" id="pdf-views" data-setting="pdfView">
+            <button data-value="width" data-i18n-title="pdf.viewWidth" data-i18n-aria="pdf.viewWidth">
+              <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h18" /><path d="m7 8-4 4 4 4" /><path d="m17 8 4 4-4 4" /></svg>
+            </button>
+            <button data-value="page" data-i18n-title="pdf.viewPage" data-i18n-aria="pdf.viewPage">
+              <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="3" width="12" height="18" rx="2" /></svg>
+            </button>
+            <button data-value="spread" data-i18n-title="pdf.viewSpread" data-i18n-aria="pdf.viewSpread">
+              <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="5" width="8.5" height="14" rx="1.5" /><rect x="13" y="5" width="8.5" height="14" rx="1.5" /></svg>
+            </button>
+          </div>
+        </div>
+        <div id="pdf-find" hidden>
+          <input id="pdf-find-input" type="search" autocomplete="off" spellcheck="false" data-i18n-placeholder="pdf.find" data-i18n-aria="pdf.find" />
+          <span id="pdf-find-count"></span>
+          <button id="pdf-find-prev" class="icon-button" data-i18n-title="pdf.findPrev" data-i18n-aria="pdf.findPrev">
+            <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m18 15-6-6-6 6" /></svg>
+          </button>
+          <button id="pdf-find-next" class="icon-button" data-i18n-title="pdf.findNext" data-i18n-aria="pdf.findNext">
+            <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6" /></svg>
+          </button>
+          <button id="pdf-find-close" class="icon-button" data-i18n-title="pdf.findClose" data-i18n-aria="pdf.findClose">×</button>
+        </div>
+        <div id="pdf-scroll" tabindex="-1"></div>
         <p id="pdf-note" hidden></p>
         <p id="pdf-hint" data-i18n="pdf.hint"></p>
       </section>
@@ -177,6 +206,23 @@
             <button data-value="moss"><i class="swatch swatch-moss"></i><span data-i18n="palette.moss"></span></button>
             <button data-value="sand"><i class="swatch swatch-sand"></i><span data-i18n="palette.sand"></span></button>
           </div>
+        </div>
+
+        <h3 data-i18n="settings.pdf"></h3>
+        <div class="setting-row">
+          <span data-i18n="settings.pdfView"></span>
+          <div class="segmented" data-setting="pdfView">
+            <button data-value="width" data-i18n="pdf.viewWidth"></button>
+            <button data-value="page" data-i18n="pdf.viewPage"></button>
+            <button data-value="spread" data-i18n="pdf.viewSpread"></button>
+          </div>
+        </div>
+        <div class="setting-row">
+          <div>
+            <label for="settings-pdf-invert" data-i18n="settings.pdfInvert"></label>
+            <p class="setting-hint" data-i18n="settings.pdfInvertHint"></p>
+          </div>
+          <input type="checkbox" id="settings-pdf-invert" class="switch" />
         </div>
       </section>
     </div>

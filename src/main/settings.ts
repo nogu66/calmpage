@@ -8,6 +8,7 @@ export type { AgentConfig, AgentKind } from '../shared/agents'
 
 export type Theme = 'system' | 'light' | 'dark'
 export type Palette = 'paper' | 'moss' | 'sand'
+export type PdfView = 'width' | 'page' | 'spread'
 
 export interface Settings {
   folder: string | null
@@ -26,9 +27,12 @@ export interface Settings {
   agents: AgentConfig[]
   agent: string
   aiWidth: number
+  // PDF の表示（幅に合わせる・ページ全体・見開き）と、ダークモードで PDF を反転するか
+  pdfView: PdfView
+  pdfInvert: boolean
 }
 
-const DEFAULTS: Settings = { folder: null, file: null, zoom: 1, auto: true, split: 0.5, sidebar: true, preview: true, theme: 'system', palette: 'paper', language: 'en', aiEnabled: true, ai: false, agents: DEFAULT_AGENTS, agent: 'claude', aiWidth: 440 }
+const DEFAULTS: Settings = { folder: null, file: null, zoom: 1, auto: true, split: 0.5, sidebar: true, preview: true, theme: 'system', palette: 'paper', language: 'en', aiEnabled: true, ai: false, agents: DEFAULT_AGENTS, agent: 'claude', aiWidth: 440, pdfView: 'width', pdfInvert: false }
 
 function path(): string {
   return join(app.getPath('userData'), 'settings.json')

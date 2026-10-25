@@ -1369,15 +1369,20 @@ button.agent-row-main:hover,
 
 #preview-col {
   position: relative;
+  display: flex;
+  flex-direction: column;
   min-width: 0;
   background: var(--pdf-bg);
 }
 
+/* 帯の下を占める。ページの offsetTop をこの中で測るので、位置指定は残す */
 #pdf-scroll {
-  position: absolute;
-  inset: 0;
+  position: relative;
+  flex: 1;
+  min-height: 0;
   overflow: auto;
   padding: 24px;
+  outline: none;
 }
 
 #pdf-scroll .pages {
@@ -1451,6 +1456,261 @@ button.agent-row-main:hover,
 
 body.has-pdf #preview-col:hover #pdf-hint {
   opacity: 0.85;
+}
+
+/* ---------- PDF の帯（ページ・拡大率・表示）と検索 ---------- */
+
+/* 一致や選択の色。ページは紙の色のままなので、明るさに関係なくライトの差し色を使う */
+:root {
+  --pdf-mark: #1a1a1a;
+}
+
+:root[data-palette='moss'] {
+  --pdf-mark: #56704d;
+}
+
+:root[data-palette='sand'] {
+  --pdf-mark: #b5603f;
+}
+
+#pdf-bar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 34px;
+  padding: 0 10px 0 14px;
+  font-size: 11.5px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  user-select: none;
+}
+
+body:not(.has-pdf) #pdf-bar > * {
+  visibility: hidden;
+}
+
+.pdf-pages {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+
+#pdf-page {
+  width: 3.4em;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  text-align: right;
+  padding: 2px 5px;
+  outline: none;
+}
+
+#pdf-page:hover {
+  background: var(--hover);
+}
+
+#pdf-page:focus {
+  border-color: var(--faint);
+  background: var(--card);
+}
+
+#pdf-zoom {
+  margin-left: auto;
+}
+
+.pdf-views {
+  padding: 1px;
+  border-radius: 7px;
+}
+
+.pdf-views button {
+  display: flex;
+  padding: 3px 7px;
+}
+
+#pdf-find {
+  position: absolute;
+  top: 40px;
+  right: 12px;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px 3px 3px 10px;
+  border-radius: 10px;
+  background: var(--raised);
+  box-shadow: var(--paper-shadow);
+}
+
+#pdf-find[hidden] {
+  display: none;
+}
+
+#pdf-find-input {
+  width: 170px;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+  outline: none;
+}
+
+#pdf-find-input::-webkit-search-cancel-button {
+  display: none;
+}
+
+#pdf-find-count {
+  min-width: 4.5em;
+  margin-right: 4px;
+  font-size: 11px;
+  color: var(--muted);
+  text-align: right;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+#pdf-find .icon-button {
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+}
+
+/* 見開き: 1–2、3–4 … と 2 ページずつ横に並べる */
+#pdf-scroll .pages.spread {
+  display: grid;
+  grid-template-columns: repeat(2, max-content);
+  justify-content: center;
+  align-items: start;
+  column-gap: 16px;
+}
+
+::highlight(pdf-find) {
+  background-color: color-mix(in srgb, var(--pdf-mark) 18%, transparent);
+}
+
+::highlight(pdf-find-current) {
+  background-color: color-mix(in srgb, var(--pdf-mark) 40%, transparent);
+}
+
+/* ---------- 文字とリンクの層（pdf.js の pdf_viewer.css から、使うところだけ） ---------- */
+
+.page {
+  --scale-round-x: 1px;
+  --scale-round-y: 1px;
+}
+
+.textLayer {
+  position: absolute;
+  inset: 0;
+  overflow: clip;
+  line-height: 1;
+  text-align: initial;
+  letter-spacing: normal;
+  word-spacing: normal;
+  text-size-adjust: none;
+  forced-color-adjust: none;
+  transform-origin: 0 0;
+  z-index: 0;
+  --min-font-size: 1;
+  --text-scale-factor: calc(var(--total-scale-factor) * var(--min-font-size));
+  --min-font-size-inv: calc(1 / var(--min-font-size));
+}
+
+.textLayer :is(span, br) {
+  color: transparent;
+  position: absolute;
+  white-space: pre;
+  cursor: text;
+  transform-origin: 0% 0%;
+}
+
+.textLayer > :not(.markedContent),
+.textLayer .markedContent span:not(.markedContent) {
+  z-index: 1;
+  --font-height: 0;
+  font-size: calc(var(--text-scale-factor) * var(--font-height));
+  --scale-x: 1;
+  --rotate: 0deg;
+  transform: rotate(var(--rotate)) scaleX(var(--scale-x)) scale(var(--min-font-size-inv));
+}
+
+.textLayer .markedContent {
+  display: contents;
+}
+
+.textLayer ::selection {
+  background: color-mix(in srgb, var(--pdf-mark) 24%, transparent);
+  color: transparent;
+}
+
+.textLayer br::selection {
+  background: transparent;
+}
+
+.textLayer .endOfContent {
+  display: block;
+  position: absolute;
+  inset: 100% 0 0;
+  z-index: 0;
+  cursor: default;
+  user-select: none;
+}
+
+.textLayer.selecting .endOfContent {
+  top: 0;
+}
+
+.annotationLayer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+  transform-origin: 0 0;
+}
+
+.annotationLayer section {
+  position: absolute;
+  pointer-events: auto;
+  box-sizing: border-box;
+  transform-origin: 0 0;
+  user-select: none;
+}
+
+/* LaTeX の PDF で要るのはリンクだけ。ほかの注釈（付箋など）の見た目はページの絵に描かれている */
+.annotationLayer section:not(.linkAnnotation) {
+  display: none;
+}
+
+.textLayer.selecting ~ .annotationLayer section {
+  pointer-events: none;
+}
+
+.annotationLayer .linkAnnotation > a {
+  position: absolute;
+  inset: 0;
+  border-radius: 2px;
+  cursor: pointer;
+}
+
+.annotationLayer .linkAnnotation > a:hover {
+  background: color-mix(in srgb, var(--pdf-mark) 10%, transparent);
+}
+
+/* ダークモードで暗く読む（設定で切り替え）。明暗だけを反転し、色合いは hue-rotate で元に戻す。
+   真っ黒にならないよう 0.9 で止める */
+@media (prefers-color-scheme: dark) {
+  body.pdf-invert .page {
+    background: var(--card);
+    --pdf-mark: var(--accent);
+  }
+
+  body.pdf-invert .page > canvas {
+    filter: invert(0.9) hue-rotate(180deg);
+  }
 }
 
 /* ---------- 何も開いていないとき ---------- */
