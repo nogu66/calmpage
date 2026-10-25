@@ -4,6 +4,19 @@ All notable changes to Calmpage are listed here. The format follows [Keep a Chan
 
 ## Unreleased
 
+### Added
+
+- Unsaved changes in every open file are written before you quit, close the window, or switch folders or files. If saving fails, or *Auto compile* is off, Calmpage asks Save / Don't Save / Cancel, and the close button shows a dot while anything is unsaved.
+- File operations from the file list's context menu and the File menu: New File (⌘N), New Folder (⌥⌘N), Rename, Move to Trash, and Show in Finder. Names are typed right in the file list.
+- The file list also shows images (PNG, JPEG, PDF, EPS, SVG) and other project files such as `.txt`, `.csv`, `.md`, `.bbx`, `.cbx`, `.dtx`, and `.ins`. Text files open in the editor, and images and PDFs open in Quick Look. Only changes to sources still trigger a recompile.
+- Drop an image on the editor to copy it into the project (into `figures/` or an existing image folder) and insert a `figure` environment with `\includegraphics`, `\caption`, and `\label`. Drop files on the file list to copy them into a folder.
+- New Document… (⇧⌘N) puts a template into an empty folder and opens it: paper (article), Japanese paper (ltjsarticle with LuaLaTeX, or jsarticle with upLaTeX), beamer slides, report, or letter. Papers and reports come with a `.bib` file.
+- File → Open Recent lists recently opened folders. They also appear in macOS's recent items.
+
+### Fixed
+
+- upLaTeX documents failed to compile, because `latexmk` does not accept `-bibtex=upbibtex`. upbibtex is now set with `-e`.
+
 ## 0.3.0 - 2026-10-23
 
 ### Changed
