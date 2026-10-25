@@ -165,7 +165,7 @@ The AI panel is optional. Open it with ⇧⌘L or the button at the right of the
 
 <!-- Screenshot goes here: the AI panel showing a diff with Allow / Reject. -->
 
-- **Any [ACP](https://agentclientprotocol.com) agent.** Agents that speak the Agent Client Protocol run in Calmpage's own thread view, as in Zed. Claude Code and Codex are built in and use your existing `claude` / `codex` login (or `ANTHROPIC_API_KEY` / `OPENAI_API_KEY`). Add others from the ACP registry in **Settings → Agents**.
+- **Any [ACP](https://agentclientprotocol.com) agent.** Agents that speak the Agent Client Protocol run in Calmpage's own thread view, as in Zed. Claude Code and Codex are built in and use your existing `claude` / `codex` login (or `ANTHROPIC_API_KEY` / `OPENAI_API_KEY`). Add others with **+ → Add agent…** in the panel: search the [ACP registry](https://agentclientprotocol.com/get-started/registry), press ⏎, and the agent opens in a new tab. Agents that ship as their own program (such as goose or Kimi CLI) are downloaded and installed for you; agents that run with `npx` or `uvx` are added as they are. The same list is in **Settings → Agents**, where you can also add an agent with your own command.
 - **Context with every message.** Chips above the thread send the current file and selected lines, compile errors, and the PDF page you are looking at. Click a chip to leave it out.
 - **You approve every edit.** Before an agent changes a file, Calmpage shows the diff with *Allow* / *Reject*. Changed files reload and compile again.
 - **A real terminal, too.** *Terminal* opens your login shell in the panel, in the open folder. Run `claude` there to use every Claude Code command, or any other CLI. Agents without ACP support can also be added as terminal agents.
@@ -175,7 +175,7 @@ The AI panel is optional. Open it with ⇧⌘L or the button at the right of the
 - Calmpage collects no analytics and sends nothing about you or your documents anywhere.
 - Your documents are compiled on your Mac with your own TeX.
 - AI agents run locally under your own accounts. What they send to their providers is governed by those agents and providers.
-- Calmpage itself goes online only to read the ACP registry when you browse it in Settings. Built-in agents are fetched with `npx`, which contacts the npm registry.
+- Calmpage itself goes online only to read the ACP registry and its icons (when you open the AI panel or the agent settings), and to download an agent you choose to install. Built-in agents are fetched with `npx`, which contacts the npm registry.
 
 ## FAQ
 

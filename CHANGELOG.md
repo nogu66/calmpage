@@ -35,6 +35,8 @@ All notable changes to Calmpage are listed here. The format follows [Keep a Chan
 - Word and character counts below the editor, for the file, the selection, or the whole document.
 - Bold (⇧⌘B), italic (⌘I), and emphasis (⇧⌘I), and Undo, Redo, Find, Replace, Find Next, Go to Line, and Comment in the Edit menu.
 - Open several windows at once with File → New Window (⌃⌘N), each with its own folder, compiles, file watching, and agents. Opening a folder that is already open brings its window to the front; folders opened from Finder or the Dock go to the front window if it is empty, or to a new window. Closing a window asks only about that window's unsaved changes, ⌘Q asks window by window, and the open windows (folder, files, tabs, and position) are restored at the next launch. Close a window with ⇧⌘W.
+- Pick an ACP agent from a searchable list: **+ → Add agent…** in the AI panel, or **Settings → Agents**. Each agent shows its icon, a short description, and whether it is ready to add, can be installed, is already added, or can't run on this Mac (and why). Use ↑ / ↓, ⏎, and Esc. Picking from the panel adds the agent and opens it in a new tab right away. The registry is read in advance when the panel opens; if it can't be read, the list says so and offers *Try again*.
+- Agents distributed as their own program (such as goose, Kimi CLI, or Amp) can be installed from the list. Calmpage downloads the archive into `~/Library/Application Support/Calmpage/agents/`, checks its SHA-256 when the registry lists one, unpacks it, and adds it. Progress shows in the row. Older versions are removed when a new one is installed, and the files are removed when you remove the agent.
 
 ### Fixed
 
@@ -43,6 +45,8 @@ All notable changes to Calmpage are listed here. The format follows [Keep a Chan
 
 ### Changed
 
+- In **Settings → Agents**, the fields for typing a command yourself are folded behind *Add with your own command…*. They still open when you click an agent to edit it.
+- When an ACP agent fails to start, the message includes the detail the agent sent (for example goose's "Configuration value not found: GOOSE_PROVIDER"), not only "Internal error".
 - New app icon: a half moon rising from the horizon on a sheet of paper, with its reflection drawn as lines of text.
 
 ## 0.3.0 - 2026-10-23
