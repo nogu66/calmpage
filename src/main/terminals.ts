@@ -5,8 +5,10 @@ import { agentEnv, which } from './shell-env'
 import { loadSettings, type AgentConfig } from './settings'
 
 // ACP に対応していない CLI は、端末（pty）ごと起動して、入出力をそのまま画面の xterm.js とやり取りする。
+// 同じエージェントを何本でも開けるよう、端末は柱のタブごとに持つ。
 
 interface Session {
+  agent: string
   pty: IPty
   listeners: IDisposable[]
 }
@@ -17,10 +19,10 @@ export class Terminals {
   constructor(private send: (channel: string, ...args: unknown[]) => void) {}
 
   // 起動できなければ、画面に出す理由を返す
-  async start(agent: AgentConfig, cwd: string, cols: number, rows: number): Promise<string | null> {
-    if (this.sessions.has(agent.id)) return null
+  async start(tab: string, agent: AgentConfig, cwd: string, cols: number, rows: number): Promise<string | null> {
+    if (this.sessions.has(tab)) return null
     const env = await agentEnv()
-    if (this.sessions.has(agent.id)) return null
+    if (this.sessions.has(tab)) return null
     env.TERM = 'xterm-256color'
     env.COLORTERM = 'truecolor'
     env.TERM_PROGRAM = 'Calmpage'
@@ -34,36 +36,41 @@ export class Terminals {
     } catch (err) {
       return String(err)
     }
-    const session: Session = { pty, listeners: [] }
+    const session: Session = { agent: agent.id, pty, listeners: [] }
     session.listeners.push(
-      pty.onData((data) => this.send('term:data', agent.id, data)),
+      pty.onData((data) => this.send('term:data', tab, data)),
       pty.onExit(({ exitCode }) => {
-        this.sessions.delete(agent.id)
-        this.send('term:exit', agent.id, exitCode)
+        this.sessions.delete(tab)
+        this.send('term:exit', tab, exitCode)
       })
     )
-    this.sessions.set(agent.id, session)
+    this.sessions.set(tab, session)
     return null
   }
 
-  write(id: string, data: string): void {
-    this.sessions.get(id)?.pty.write(data)
+  write(tab: string, data: string): void {
+    this.sessions.get(tab)?.pty.write(data)
   }
 
-  resize(id: string, cols: number, rows: number): void {
-    if (cols > 0 && rows > 0) this.sessions.get(id)?.pty.resize(cols, rows)
+  resize(tab: string, cols: number, rows: number): void {
+    if (cols > 0 && rows > 0) this.sessions.get(tab)?.pty.resize(cols, rows)
   }
 
-  // 止めた知らせは画面へ送らない（画面側は自分で端末を片付ける）
-  stop(id: string): void {
-    const session = this.sessions.get(id)
+  // タブを閉じたとき。止めた知らせは画面へ送らない（画面側は自分で端末を片付ける）
+  close(tab: string): void {
+    const session = this.sessions.get(tab)
     if (!session) return
     for (const l of session.listeners) l.dispose()
     session.pty.kill()
-    this.sessions.delete(id)
+    this.sessions.delete(tab)
+  }
+
+  // エージェントの設定を変えた・消したときは、そのエージェントのタブをすべて止める
+  stop(agent: string): void {
+    for (const [tab, s] of [...this.sessions]) if (s.agent === agent) this.close(tab)
   }
 
   stopAll(): void {
-    for (const id of [...this.sessions.keys()]) this.stop(id)
+    for (const tab of [...this.sessions.keys()]) this.close(tab)
   }
 }

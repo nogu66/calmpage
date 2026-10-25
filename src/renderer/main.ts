@@ -300,8 +300,34 @@ function setupDivider(): void {
 type ChipName = 'file' | 'errors' | 'pdf'
 const chipOn: Record<ChipName, boolean> = { file: true, errors: true, pdf: true }
 
+// 柱のタブ。同じエージェントを何本でも開ける（同じ名前が並ぶときは 2 本目から番号を付ける）。
+// ACP はプロセスをエージェントごとに分け合い、セッションをタブごとに持つ。端末はタブごとに 1 つ。
+interface AiTab {
+  id: string
+  agent: string
+  n: number
+}
+
+let tabs: AiTab[] = []
+let currentTab: string | null = null
+let tabSeq = 0
+
+function agentById(id: string): AgentConfig | undefined {
+  return settings.agents.find((a) => a.id === id)
+}
+
+// 柱を開いたときに最初のタブで使うエージェント（最後に開いたもの）
+function defaultAgent(): AgentConfig | undefined {
+  return agentById(settings.agent) ?? settings.agents[0]
+}
+
+function activeTab(): AiTab | undefined {
+  return tabs.find((t) => t.id === currentTab)
+}
+
 function currentAgent(): AgentConfig | undefined {
-  return settings.agents.find((a) => a.id === settings.agent) ?? settings.agents[0]
+  const tab = activeTab()
+  return tab && agentById(tab.agent)
 }
 
 function aiOpen(): boolean {
@@ -312,12 +338,20 @@ function setAiOpen(open: boolean, focus = true): void {
   document.body.classList.toggle('ai-open', open)
   $('toggle-ai').setAttribute('aria-pressed', String(open))
   sumi.saveSettings({ ai: open })
-  if (open) showAgent(focus)
+  if (open) ensureTab(focus)
   else editor.view.focus()
 }
 
-// 選んでいるエージェントを柱に出す。ACP なら会話の画面、それ以外は端末。
-function showAgent(focus = true): void {
+// タブが 1 つもなければ、最後に使ったエージェントで 1 つ開く
+function ensureTab(focus = true): void {
+  const agent = defaultAgent()
+  if (!tabs.length && agent) openTab(agent.id, focus)
+  else showTab(focus)
+}
+
+// 選んでいるタブを柱に出す。ACP なら会話の画面、それ以外は端末。初めて出すタブは、ここで起動する。
+function showTab(focus = true): void {
+  const tab = activeTab()
   const agent = currentAgent()
   const acp = agent?.kind === 'acp'
   $('ai-empty').hidden = !!agent
@@ -325,9 +359,76 @@ function showAgent(focus = true): void {
   $('ai-terms').hidden = !agent || acp
   $('new-thread').hidden = !acp
   updateChips()
-  if (!agent) return
-  if (acp) threads.show(agent, focus)
-  else void terminals.show(agent.id, focus)
+  if (!tab || !agent) return
+  if (acp) threads.show(tab.id, agent, focus)
+  else void terminals.show(tab.id, agent.id, focus)
+}
+
+function openTab(agent: string, focus = true): void {
+  const n = Math.max(0, ...tabs.filter((t) => t.agent === agent).map((t) => t.n)) + 1
+  const tab: AiTab = { id: `tab-${++tabSeq}`, agent, n }
+  tabs.push(tab)
+  settings.agent = agent
+  sumi.saveSettings({ agent })
+  selectTab(tab.id, focus)
+}
+
+function selectTab(id: string, focus = true): void {
+  currentTab = id
+  renderTabs()
+  showTab(focus)
+}
+
+// 閉じたら隣のタブへ移る。最後の 1 つを閉じたら柱ごと閉じる。
+function closeTab(id: string): void {
+  const i = tabs.findIndex((t) => t.id === id)
+  if (i < 0) return
+  threads.drop(id)
+  terminals.drop(id)
+  tabs.splice(i, 1)
+  if (currentTab === id) currentTab = (tabs[i] ?? tabs[i - 1])?.id ?? null
+  renderTabs()
+  if (!tabs.length) setAiOpen(false)
+  else if (aiOpen()) showTab()
+}
+
+function closeAllTabs(): void {
+  threads.reset()
+  terminals.reset()
+  tabs = []
+  currentTab = null
+  renderTabs()
+}
+
+function tabLabel(tab: AiTab): string {
+  const name = agentById(tab.agent)?.name ?? ''
+  return tab.n > 1 ? `${name} ${tab.n}` : name
+}
+
+function renderTabs(): void {
+  const strip = $('ai-tabs')
+  strip.replaceChildren()
+  for (const tab of tabs) {
+    const label = tabLabel(tab)
+    const el = element('div', 'ai-tab')
+    const main = element('button', 'ai-tab-main', label)
+    main.title = label
+    main.setAttribute('role', 'tab')
+    main.setAttribute('aria-selected', String(tab.id === currentTab))
+    main.addEventListener('click', () => selectTab(tab.id))
+    const close = element('button', 'ai-tab-close', '×')
+    close.title = tr('ai.closeTab')
+    close.setAttribute('aria-label', `${tr('ai.closeTab')} ${label}`)
+    close.addEventListener('click', () => closeTab(tab.id))
+    // 中ボタンでも閉じる
+    el.addEventListener('auxclick', (e) => {
+      if (e.button === 1) closeTab(tab.id)
+    })
+    el.classList.toggle('active', tab.id === currentTab)
+    el.append(main, close)
+    strip.append(el)
+  }
+  strip.querySelector('.ai-tab.active')?.scrollIntoView({ block: 'nearest', inline: 'nearest' })
 }
 
 // ⇧⌘L: 閉じていれば開く。柱で入力中なら閉じる。ほかを触っていたら柱へ戻る。
@@ -339,11 +440,6 @@ function toggleAi(): void {
   else terminals.focus()
 }
 
-function selectAgent(id: string): void {
-  closeAgentMenu()
-  sumi.updateSettings({ agent: id })
-}
-
 function element<K extends keyof HTMLElementTagNameMap>(tag: K, className: string, text?: string): HTMLElementTagNameMap[K] {
   const el = document.createElement(tag)
   el.className = className
@@ -351,21 +447,22 @@ function element<K extends keyof HTMLElementTagNameMap>(tag: K, className: strin
   return el
 }
 
-// 柱の上の一覧と、設定画面のエージェントの一覧
+// 柱のタブと「+」の一覧、設定画面のエージェントの一覧
 function renderAgents(): void {
-  const agent = currentAgent()
-  $('agent-name').textContent = agent?.name ?? tr('ai.addAgent')
+  renderTabs()
   const kindLabel = (a: AgentConfig): string => (a.kind === 'acp' ? 'ACP' : tr('settings.kindTerminal'))
 
   const menu = $('agent-menu')
   menu.replaceChildren()
   for (const a of settings.agents) {
     const item = element('button', 'agent-item', a.name)
-    item.setAttribute('role', 'menuitemradio')
-    item.setAttribute('aria-checked', String(a.id === agent?.id))
+    item.setAttribute('role', 'menuitem')
     // 素の端末は名前だけで分かるので、種類の印を付けない
     if (a.kind === 'terminal' && a.command !== LOGIN_SHELL) item.append(element('span', 'agent-kind', kindLabel(a)))
-    item.addEventListener('click', () => selectAgent(a.id))
+    item.addEventListener('click', () => {
+      closeAgentMenu()
+      openTab(a.id)
+    })
     menu.append(item)
   }
   const add = element('button', 'agent-item agent-add', tr('ai.addAgent'))
@@ -467,25 +564,29 @@ function renderRegistry(): void {
     const action = element('button', 'registry-add', tr(added ? 'settings.added' : entry.installed ? 'settings.agentAdd' : 'settings.notInstalled'))
     action.disabled = added || !entry.installed
     if (!entry.installed) action.title = tr('settings.notInstalledHint', { command: agent.command })
-    action.addEventListener('click', () => sumi.updateSettings({ agents: [...settings.agents, agent], agent: agent.id }))
+    action.addEventListener('click', () => sumi.updateSettings({ agents: [...settings.agents, agent] }))
     li.append(main, action)
     list.append(li)
   }
 }
 
+// 「+」の一覧。「+」はタブの数で左右に動くので、ウィンドウからはみ出さない位置に出す。
 function openAgentMenu(): void {
-  $('agent-menu').hidden = false
-  $('agent-picker').setAttribute('aria-expanded', 'true')
+  const menu = $('agent-menu')
+  const button = $('new-tab').getBoundingClientRect()
+  menu.hidden = false
+  menu.style.top = `${button.bottom + 4}px`
+  menu.style.left = `${Math.max(8, Math.min(button.left, window.innerWidth - menu.offsetWidth - 8))}px`
+  $('new-tab').setAttribute('aria-expanded', 'true')
 }
 
 function closeAgentMenu(): void {
   $('agent-menu').hidden = true
-  $('agent-picker').setAttribute('aria-expanded', 'false')
+  $('new-tab').setAttribute('aria-expanded', 'false')
 }
 
 function removeAgent(id: string): void {
-  const agents = settings.agents.filter((a) => a.id !== id)
-  sumi.updateSettings({ agents, agent: settings.agent === id ? (agents[0]?.id ?? '') : settings.agent })
+  sumi.updateSettings({ agents: settings.agents.filter((a) => a.id !== id) })
 }
 
 // 「npx -y pkg --acp」のような 1 行を、コマンドと引数に分ける（引用符で囲めば空白を含められる）
@@ -508,7 +609,7 @@ function submitAgent(e: SubmitEvent): void {
   } else {
     const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'agent'
     const agent: AgentConfig = { id: `${slug}-${Date.now().toString(36)}`, name, kind, command: parts[0], args: parts.slice(1) }
-    sumi.updateSettings({ agents: [...settings.agents, agent], agent: agent.id })
+    sumi.updateSettings({ agents: [...settings.agents, agent] })
   }
   $<HTMLFormElement>('agent-form').reset()
   setFormKind('acp')
@@ -629,7 +730,7 @@ function onChip(name: ChipName): void {
 
 function setupAi(): void {
   $('toggle-ai').addEventListener('click', () => setAiOpen(!aiOpen()))
-  $('agent-picker').addEventListener('click', () => ($('agent-menu').hidden ? openAgentMenu() : closeAgentMenu()))
+  $('new-tab').addEventListener('click', () => ($('agent-menu').hidden ? openAgentMenu() : closeAgentMenu()))
   document.addEventListener('pointerdown', (e) => {
     if (!$('agent-menu').hidden && !(e.target as HTMLElement).closest('.agent-picker-wrap')) closeAgentMenu()
   })
@@ -723,6 +824,7 @@ async function onFolderOpened(next: string, file: string | null): Promise<void> 
   diagnostics = []
   clearPreview()
   setPdfNote(null)
+  // タブの並びは残し、中身だけ新しいフォルダで起動し直す（main 側ではもう止めてある）
   threads.reset()
   terminals.reset()
   $('ai-folder').textContent = baseName(next)
@@ -734,7 +836,7 @@ async function onFolderOpened(next: string, file: string | null): Promise<void> 
   updateTitle()
   const first = file ?? files.find((f) => f.endsWith('.tex'))
   if (first) await openFile(first)
-  if (aiOpen()) showAgent(false)
+  if (aiOpen()) ensureTab(false)
 }
 
 // ほかのエディターや AI が書き換えたら、開いている内容を読み直して組み直す。
@@ -780,21 +882,25 @@ function applySettings(next: Settings): void {
   if (languageChanged) applyLanguage()
   terminals.applyTheme()
 
-  // 設定を変えた・消したエージェントは画面からも片付ける（main 側では止めてある）
+  // 設定を変えたエージェントのタブは、新しい設定で起動し直す。消したエージェントのタブは閉じる（main 側では止めてある）
   let agentsChanged = false
   for (const old of prev?.agents ?? []) {
-    if (JSON.stringify(next.agents.find((a) => a.id === old.id)) === JSON.stringify(old)) continue
-    threads.drop(old.id)
-    terminals.drop(old.id)
+    const now = next.agents.find((a) => a.id === old.id)
+    if (JSON.stringify(now) === JSON.stringify(old)) continue
     agentsChanged = true
+    for (const tab of tabs.filter((t) => t.agent === old.id)) {
+      threads.drop(tab.id)
+      terminals.drop(tab.id)
+    }
+    if (!now) tabs = tabs.filter((t) => t.agent !== old.id)
   }
+  if (!activeTab()) currentTab = tabs[0]?.id ?? null
   renderAgents()
   // AI を切ったら、柱を閉じて画面からも片付ける（main 側ではエージェントを止めてある）
   if (!next.aiEnabled && prev?.aiEnabled !== false) {
     if (aiOpen()) setAiOpen(false)
-    threads.reset()
-    terminals.reset()
-  } else if (aiOpen() && (agentsChanged || prev?.agent !== next.agent)) showAgent()
+    closeAllTabs()
+  } else if (aiOpen() && agentsChanged) ensureTab(false)
   else updateChips()
 }
 

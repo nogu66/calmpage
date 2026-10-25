@@ -467,13 +467,16 @@ body.ai-open #ai-divider {
   flex: none;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 4px;
   height: 38px;
   padding: 0 12px 0 8px;
 }
 
+/* フォルダ名より、タブの名前を先に見せる */
 #ai-folder {
+  flex: 0 100 auto;
   margin-left: auto;
+  padding-left: 4px;
   min-width: 0;
   overflow: hidden;
   white-space: nowrap;
@@ -520,39 +523,98 @@ body.ai-open #ai-divider {
   color: var(--muted);
 }
 
-/* ---------- エージェントの選択 ---------- */
+/* ---------- タブと「+」の一覧 ---------- */
 
-.agent-picker-wrap {
-  position: relative;
-}
-
-#agent-picker {
+/* 並びきらないときは、まずタブを縮め、それでも入らなければ横に流す（スクロールバーは出さない） */
+#ai-tabs {
   display: flex;
   align-items: center;
-  gap: 4px;
-  border: none;
+  gap: 2px;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.ai-tab {
+  flex: 0 1 auto;
+  min-width: 64px;
+  display: flex;
+  align-items: center;
   border-radius: 6px;
-  background: transparent;
-  color: var(--text);
-  font: inherit;
-  font-size: 12.5px;
-  font-weight: 600;
-  padding: 4px 6px;
-}
-
-#agent-picker:hover,
-#agent-picker[aria-expanded='true'] {
-  background: var(--hover);
-}
-
-#agent-picker svg {
   color: var(--muted);
 }
 
+.ai-tab:hover {
+  background: var(--hover);
+}
+
+.ai-tab.active {
+  background: var(--hover);
+  color: var(--text);
+}
+
+.ai-tab-main {
+  flex: 1;
+  min-width: 0;
+  max-width: 140px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 12.5px;
+  padding: 4px 2px 4px 8px;
+}
+
+.ai-tab.active .ai-tab-main {
+  font-weight: 600;
+}
+
+/* × は、選んでいるタブと指を乗せたタブにだけ出す（場所は空けておき、幅が揺れないようにする） */
+.ai-tab-close {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  margin-right: 3px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 13px;
+  line-height: 1;
+  padding: 0;
+  visibility: hidden;
+}
+
+.ai-tab.active .ai-tab-close,
+.ai-tab:hover .ai-tab-close {
+  visibility: visible;
+}
+
+.ai-tab-close:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+
+.agent-picker-wrap {
+  flex: none;
+}
+
+#new-tab {
+  width: 26px;
+  height: 26px;
+}
+
+#new-tab[aria-expanded='true'] {
+  background: var(--hover);
+  color: var(--text);
+}
+
 #agent-menu {
-  position: absolute;
-  top: calc(100% + 4px);
-  left: 0;
+  position: fixed;
   z-index: 10;
   min-width: 200px;
   padding: 4px;
@@ -577,19 +639,11 @@ body.ai-open #ai-divider {
   font: inherit;
   font-size: 12.5px;
   text-align: left;
-  padding: 6px 10px 6px 24px;
-  position: relative;
+  padding: 6px 10px;
 }
 
 .agent-item:hover {
   background: var(--hover);
-}
-
-.agent-item[aria-checked='true']::before {
-  content: '✓';
-  position: absolute;
-  left: 8px;
-  font-size: 11px;
 }
 
 .agent-add {

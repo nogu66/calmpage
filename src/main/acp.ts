@@ -22,9 +22,14 @@ interface Running {
   child: ChildProcess
   conn: acp.ClientConnection
   ready: Promise<acp.InitializeResponse>
-  sessionId: string | null
   cwd: string
   stderr: string
+}
+
+// 柱のタブ 1 つ分。同じエージェントのタブは 1 つのプロセスを分け合い、それぞれ別のセッションを持つ。
+interface Tab {
+  agent: string
+  sessionId: string | null
 }
 
 function message(err: unknown): string {
@@ -34,28 +39,36 @@ function message(err: unknown): string {
 
 export class AcpAgents {
   private agents = new Map<string, Running>()
-  private permissions = new Map<string, { agent: string; resolve: (r: acp.RequestPermissionResponse) => void }>()
+  private tabs = new Map<string, Tab>()
+  private permissions = new Map<string, { tab: string; resolve: (r: acp.RequestPermissionResponse) => void }>()
 
   constructor(private send: (channel: string, ...args: unknown[]) => void) {}
 
-  // 起動してセッションを作る。サインインが要るときは、その方法を返す。
-  async start(agent: AgentConfig, cwd: string): Promise<StartResult> {
-    let running = this.agents.get(agent.id)
-    if (!running) {
-      const spawned = await this.spawn(agent, cwd)
-      if ('error' in spawned) return { ok: false, error: spawned.error }
-      running = spawned
+  // 起動してセッションを作る（もう動いていれば、そのプロセスに新しいセッションを足す）。サインインが要るときは、その方法を返す。
+  async start(tab: string, agent: AgentConfig, cwd: string): Promise<StartResult> {
+    if (!this.agents.has(agent.id)) {
+      const env = await agentEnv()
+      // 待つ間に、同じエージェントの別のタブが起動していることがある
+      if (!this.agents.has(agent.id)) {
+        const spawned = this.spawn(agent, cwd, env)
+        if ('error' in spawned) return { ok: false, error: spawned.error }
+      }
     }
-    return this.newSession(agent.id)
+    // 「新しいスレッド」でも呼ばれる。前のセッションは newSession が片付ける。
+    if (!this.tabs.has(tab)) this.tabs.set(tab, { agent: agent.id, sessionId: null })
+    return this.newSession(tab)
   }
 
-  async newSession(id: string): Promise<StartResult> {
-    const running = this.agents.get(id)
-    if (!running) return { ok: false, error: 'not running' }
+  async newSession(tab: string): Promise<StartResult> {
+    const entry = this.tabs.get(tab)
+    const running = entry && this.agents.get(entry.agent)
+    if (!entry || !running) return { ok: false, error: 'not running' }
     try {
       await running.ready
+      const old = entry.sessionId
       const session = await running.conn.agent.request(acp.methods.agent.session.new, { cwd: running.cwd, mcpServers: [] })
-      running.sessionId = session.sessionId
+      entry.sessionId = session.sessionId
+      if (old) void this.closeSession(running, old)
       return { ok: true }
     } catch (err) {
       if (err instanceof acp.RequestError && err.code === AUTH_REQUIRED) {
@@ -66,23 +79,25 @@ export class AcpAgents {
     }
   }
 
-  async authenticate(id: string, methodId: string): Promise<StartResult> {
-    const running = this.agents.get(id)
+  async authenticate(tab: string, methodId: string): Promise<StartResult> {
+    const entry = this.tabs.get(tab)
+    const running = entry && this.agents.get(entry.agent)
     if (!running) return { ok: false, error: 'not running' }
     try {
       await running.conn.agent.request(acp.methods.agent.authenticate, { methodId })
     } catch (err) {
       return { ok: false, error: this.explain(running, err) }
     }
-    return this.newSession(id)
+    return this.newSession(tab)
   }
 
   // 1 回分のやり取り。終わった理由（end_turn / cancelled など）を返す。
-  async prompt(id: string, prompt: acp.ContentBlock[]): Promise<{ stopReason?: string; error?: string }> {
-    const running = this.agents.get(id)
-    if (!running?.sessionId) return { error: 'not running' }
+  async prompt(tab: string, prompt: acp.ContentBlock[]): Promise<{ stopReason?: string; error?: string }> {
+    const entry = this.tabs.get(tab)
+    const running = entry && this.agents.get(entry.agent)
+    if (!running || !entry.sessionId) return { error: 'not running' }
     try {
-      const res = await running.conn.agent.request(acp.methods.agent.session.prompt, { sessionId: running.sessionId, prompt })
+      const res = await running.conn.agent.request(acp.methods.agent.session.prompt, { sessionId: entry.sessionId, prompt })
       return { stopReason: res.stopReason }
     } catch (err) {
       return { error: this.explain(running, err) }
@@ -90,14 +105,15 @@ export class AcpAgents {
   }
 
   // 中断。答えを待っている許可の確認は「取り消し」で返す（ACP の決まり）。
-  cancel(id: string): void {
-    const running = this.agents.get(id)
+  cancel(tab: string): void {
     for (const [key, p] of this.permissions) {
-      if (p.agent !== id) continue
+      if (p.tab !== tab) continue
       p.resolve({ outcome: { outcome: 'cancelled' } })
       this.permissions.delete(key)
     }
-    if (running?.sessionId) void running.conn.agent.notify(acp.methods.agent.session.cancel, { sessionId: running.sessionId })
+    const entry = this.tabs.get(tab)
+    const running = entry && this.agents.get(entry.agent)
+    if (running && entry.sessionId) void running.conn.agent.notify(acp.methods.agent.session.cancel, { sessionId: entry.sessionId })
   }
 
   answerPermission(key: string, optionId: string | null): void {
@@ -107,11 +123,28 @@ export class AcpAgents {
     pending.resolve({ outcome: optionId ? { outcome: 'selected', optionId } : { outcome: 'cancelled' } })
   }
 
-  stop(id: string): void {
-    const running = this.agents.get(id)
+  // タブを閉じたとき。そのエージェントのタブがほかになければ、プロセスごと止める。
+  close(tab: string): void {
+    const entry = this.tabs.get(tab)
+    if (!entry) return
+    this.cancel(tab)
+    this.tabs.delete(tab)
+    const running = this.agents.get(entry.agent)
     if (!running) return
-    this.cancel(id)
-    this.agents.delete(id)
+    if (![...this.tabs.values()].some((t) => t.agent === entry.agent)) this.stop(entry.agent)
+    else if (entry.sessionId) void this.closeSession(running, entry.sessionId)
+  }
+
+  // エージェントの設定を変えた・消したとき。そのエージェントのタブはすべて止まる。
+  stop(agent: string): void {
+    for (const [tab, t] of [...this.tabs]) {
+      if (t.agent !== agent) continue
+      this.cancel(tab)
+      this.tabs.delete(tab)
+    }
+    const running = this.agents.get(agent)
+    if (!running) return
+    this.agents.delete(agent)
     running.conn.close()
     running.child.kill()
   }
@@ -120,8 +153,18 @@ export class AcpAgents {
     for (const id of [...this.agents.keys()]) this.stop(id)
   }
 
-  private async spawn(agent: AgentConfig, cwd: string): Promise<Running | { error: string }> {
-    const env = await agentEnv()
+  // 使い終わったセッションを片付ける。対応していないエージェントには送らない。
+  private async closeSession(running: Running, sessionId: string): Promise<void> {
+    const init = await running.ready.catch(() => null)
+    if (!init?.agentCapabilities?.sessionCapabilities?.close) return
+    await running.conn.agent.request(acp.methods.agent.session.close, { sessionId }).catch(() => {})
+  }
+
+  private tabOf(agent: string, sessionId: string): string | undefined {
+    for (const [tab, t] of this.tabs) if (t.agent === agent && t.sessionId === sessionId) return tab
+  }
+
+  private spawn(agent: AgentConfig, cwd: string, env: Record<string, string>): Running | { error: string } {
     const file = which(agent.command, env.PATH)
     if (!file) return { error: t(loadSettings().language, 'ai.notFound', { command: agent.command }) }
     const child = spawn(file, agent.args, { cwd, env: { ...env, ...agent.env }, stdio: ['pipe', 'pipe', 'pipe'] })
@@ -131,7 +174,10 @@ export class AcpAgents {
     )
     const conn = acp
       .client({ name: 'Calmpage' })
-      .onNotification(acp.methods.client.session.update, ({ params }) => this.send('acp:update', agent.id, params.update))
+      .onNotification(acp.methods.client.session.update, ({ params }) => {
+        const tab = this.tabOf(agent.id, params.sessionId)
+        if (tab) this.send('acp:update', tab, params.update)
+      })
       .onRequest(acp.methods.client.session.requestPermission, ({ params, signal }) => this.askPermission(agent.id, params, signal))
       .onRequest(acp.methods.client.fs.readTextFile, async ({ params }) => ({ content: await readLines(params.path, params.line, params.limit) }))
       // 書いたファイルは監視が拾い、エディターが読み直して組み直す
@@ -144,7 +190,6 @@ export class AcpAgents {
       child,
       conn,
       cwd,
-      sessionId: null,
       stderr: '',
       ready: conn.agent.request(acp.methods.agent.initialize, {
         protocolVersion: acp.PROTOCOL_VERSION,
@@ -156,22 +201,30 @@ export class AcpAgents {
     // ログは標準エラーに出る。詰まらないよう読み続け、終了時の説明用に末尾だけ残す。
     child.stderr!.on('data', (d: Buffer) => (running.stderr = (running.stderr + d.toString()).slice(-4000)))
     child.on('error', (err) => (running.stderr += `\n${message(err)}`))
+    // 落ちたら、そのプロセスを使っていたタブすべてに知らせる
     child.on('exit', (code) => {
       if (this.agents.get(agent.id) !== running) return
       this.agents.delete(agent.id)
-      this.cancel(agent.id)
-      this.send('acp:exit', agent.id, lastLines(running.stderr) || `exit ${code}`)
+      const detail = lastLines(running.stderr) || `exit ${code}`
+      for (const [tab, t] of [...this.tabs]) {
+        if (t.agent !== agent.id) continue
+        this.cancel(tab)
+        this.tabs.delete(tab)
+        this.send('acp:exit', tab, detail)
+      }
     })
     this.agents.set(agent.id, running)
     return running
   }
 
   private askPermission(agent: string, params: acp.RequestPermissionRequest, signal: AbortSignal): Promise<acp.RequestPermissionResponse> {
+    const tab = this.tabOf(agent, params.sessionId)
+    if (!tab) return Promise.resolve({ outcome: { outcome: 'cancelled' } })
     return new Promise((resolve) => {
       const key = randomUUID()
-      this.permissions.set(key, { agent, resolve })
+      this.permissions.set(key, { tab, resolve })
       signal.addEventListener('abort', () => this.answerPermission(key, null))
-      this.send('acp:permission', agent, key, params)
+      this.send('acp:permission', tab, key, params)
     })
   }
 

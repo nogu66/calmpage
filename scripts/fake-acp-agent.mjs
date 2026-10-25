@@ -2,11 +2,13 @@
 // - 受け取った prompt の中身（種類と名前）を返事として報告する
 // - 「edit」を含むと、差分付きで許可を求め、許可されたらクライアントの fs/write_text_file で smoke-note.tex を書く
 // - 「slow」を含むと、session/cancel が届くまで待つ
+// - セッションは作るたびに別の ID を返す（柱のタブごとに 1 つ）
 import { createInterface } from 'node:readline'
 import { join } from 'node:path'
 
 let cwd = process.cwd()
 let nextId = 1
+let sessions = 0
 const waiting = new Map()
 let cancelled = null
 
@@ -70,7 +72,7 @@ const handlers = {
   initialize: () => ({ protocolVersion: 1, agentCapabilities: { promptCapabilities: { embeddedContext: true } }, authMethods: [] }),
   'session/new': (params) => {
     cwd = params.cwd
-    return { sessionId: 'fake-session' }
+    return { sessionId: `fake-session-${++sessions}` }
   },
   'session/prompt': prompt
 }

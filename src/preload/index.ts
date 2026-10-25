@@ -26,15 +26,18 @@ const api = {
     ipcRenderer.invoke('sync:backward', page, x, y),
   saveSettings: (patch: Partial<Settings>): void => ipcRenderer.send('settings:save', patch),
   updateSettings: (patch: Partial<Settings>): void => ipcRenderer.send('settings:update', patch),
-  termStart: (id: string, cols: number, rows: number): Promise<string | null> => ipcRenderer.invoke('term:start', id, cols, rows),
-  termInput: (id: string, data: string): void => ipcRenderer.send('term:input', id, data),
-  termResize: (id: string, cols: number, rows: number): void => ipcRenderer.send('term:resize', id, cols, rows),
-  acpStart: (id: string): Promise<StartResult> => ipcRenderer.invoke('acp:start', id),
-  acpNewSession: (id: string): Promise<StartResult> => ipcRenderer.invoke('acp:new-session', id),
-  acpAuthenticate: (id: string, methodId: string): Promise<StartResult> => ipcRenderer.invoke('acp:authenticate', id, methodId),
-  acpPrompt: (id: string, prompt: ContentBlock[]): Promise<{ stopReason?: string; error?: string }> =>
-    ipcRenderer.invoke('acp:prompt', id, prompt),
-  acpCancel: (id: string): void => ipcRenderer.send('acp:cancel', id),
+  termStart: (tab: string, id: string, cols: number, rows: number): Promise<string | null> =>
+    ipcRenderer.invoke('term:start', tab, id, cols, rows),
+  termInput: (tab: string, data: string): void => ipcRenderer.send('term:input', tab, data),
+  termResize: (tab: string, cols: number, rows: number): void => ipcRenderer.send('term:resize', tab, cols, rows),
+  termClose: (tab: string): void => ipcRenderer.send('term:close', tab),
+  acpStart: (tab: string, id: string): Promise<StartResult> => ipcRenderer.invoke('acp:start', tab, id),
+  acpNewSession: (tab: string): Promise<StartResult> => ipcRenderer.invoke('acp:new-session', tab),
+  acpAuthenticate: (tab: string, methodId: string): Promise<StartResult> => ipcRenderer.invoke('acp:authenticate', tab, methodId),
+  acpPrompt: (tab: string, prompt: ContentBlock[]): Promise<{ stopReason?: string; error?: string }> =>
+    ipcRenderer.invoke('acp:prompt', tab, prompt),
+  acpCancel: (tab: string): void => ipcRenderer.send('acp:cancel', tab),
+  acpClose: (tab: string): void => ipcRenderer.send('acp:close', tab),
   acpAnswer: (key: string, optionId: string | null): void => ipcRenderer.send('acp:answer', key, optionId),
   openLink: (url: string): void => ipcRenderer.send('link:open', url),
   listRegistry: (): Promise<{ agents?: RegistryAgent[]; error?: string }> => ipcRenderer.invoke('registry:list'),
@@ -45,11 +48,11 @@ const api = {
   onBuildFinished: (cb: (result: BuildResult | null, file: string, error?: string) => void) => on('build:finished', cb),
   onMenu: (cb: (command: string) => void) => on('menu', cb),
   onSettings: (cb: (settings: Settings) => void) => on('settings:changed', cb),
-  onTermData: (cb: (id: string, data: string) => void) => on('term:data', cb),
-  onTermExit: (cb: (id: string, code: number) => void) => on('term:exit', cb),
-  onAcpUpdate: (cb: (id: string, update: SessionUpdate) => void) => on('acp:update', cb),
-  onAcpPermission: (cb: (id: string, key: string, request: RequestPermissionRequest) => void) => on('acp:permission', cb),
-  onAcpExit: (cb: (id: string, detail: string) => void) => on('acp:exit', cb)
+  onTermData: (cb: (tab: string, data: string) => void) => on('term:data', cb),
+  onTermExit: (cb: (tab: string, code: number) => void) => on('term:exit', cb),
+  onAcpUpdate: (cb: (tab: string, update: SessionUpdate) => void) => on('acp:update', cb),
+  onAcpPermission: (cb: (tab: string, key: string, request: RequestPermissionRequest) => void) => on('acp:permission', cb),
+  onAcpExit: (cb: (tab: string, detail: string) => void) => on('acp:exit', cb)
 }
 
 export type SumiApi = typeof api

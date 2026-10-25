@@ -267,20 +267,23 @@ function registerIpc(): void {
   )
   ipcMain.on('settings:save', (_e, patch: Partial<Settings>) => saveSettings(patch))
   ipcMain.on('settings:update', (_e, patch: Partial<Settings>) => updateSettings(patch))
-  ipcMain.handle('term:start', (_e, id: string, cols: number, rows: number) => {
+  // 端末と ACP は柱のタブごとに動かす。タブの ID は画面が決める。
+  ipcMain.handle('term:start', (_e, tab: string, id: string, cols: number, rows: number) => {
     const agent = agentConfig(id)
-    return folder && agent ? terminals.start(agent, folder, cols, rows) : null
+    return folder && agent ? terminals.start(tab, agent, folder, cols, rows) : null
   })
-  ipcMain.on('term:input', (_e, id: string, data: string) => terminals.write(id, data))
-  ipcMain.on('term:resize', (_e, id: string, cols: number, rows: number) => terminals.resize(id, cols, rows))
-  ipcMain.handle('acp:start', (_e, id: string) => {
+  ipcMain.on('term:input', (_e, tab: string, data: string) => terminals.write(tab, data))
+  ipcMain.on('term:resize', (_e, tab: string, cols: number, rows: number) => terminals.resize(tab, cols, rows))
+  ipcMain.on('term:close', (_e, tab: string) => terminals.close(tab))
+  ipcMain.handle('acp:start', (_e, tab: string, id: string) => {
     const agent = agentConfig(id)
-    return folder && agent ? acpAgents.start(agent, folder) : { ok: false, error: 'no folder' }
+    return folder && agent ? acpAgents.start(tab, agent, folder) : { ok: false, error: 'no folder' }
   })
-  ipcMain.handle('acp:new-session', (_e, id: string) => acpAgents.newSession(id))
-  ipcMain.handle('acp:authenticate', (_e, id: string, methodId: string) => acpAgents.authenticate(id, methodId))
-  ipcMain.handle('acp:prompt', (_e, id: string, prompt: unknown[]) => acpAgents.prompt(id, prompt as never))
-  ipcMain.on('acp:cancel', (_e, id: string) => acpAgents.cancel(id))
+  ipcMain.handle('acp:new-session', (_e, tab: string) => acpAgents.newSession(tab))
+  ipcMain.handle('acp:authenticate', (_e, tab: string, methodId: string) => acpAgents.authenticate(tab, methodId))
+  ipcMain.handle('acp:prompt', (_e, tab: string, prompt: unknown[]) => acpAgents.prompt(tab, prompt as never))
+  ipcMain.on('acp:cancel', (_e, tab: string) => acpAgents.cancel(tab))
+  ipcMain.on('acp:close', (_e, tab: string) => acpAgents.close(tab))
   ipcMain.on('acp:answer', (_e, key: string, optionId: string | null) => acpAgents.answerPermission(key, optionId))
   ipcMain.handle('registry:list', async () => {
     try {

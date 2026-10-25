@@ -7,7 +7,7 @@ import type { AgentConfig } from '../main/settings'
 import type { SumiApi } from '../preload'
 import type { Key } from '../shared/i18n'
 
-// ACP のエージェントとの会話の画面。エージェントごとに 1 本のスレッドを持ち、切り替えても消さない。
+// ACP のエージェントとの会話の画面。柱のタブごとに 1 本のスレッドを持ち、切り替えても消さない。
 
 export interface ThreadHost {
   sumi: SumiApi
@@ -56,6 +56,7 @@ class Thread {
   private pending = new Map<string, HTMLElement>()
 
   constructor(
+    readonly tab: string,
     readonly agent: AgentConfig,
     private host: ThreadHost
   ) {
@@ -106,7 +107,7 @@ class Thread {
     this.plan = null
     this.setState('starting')
     const note = this.note(this.host.tr('ai.starting', { name: this.agent.name }), this.host.tr('ai.firstRun'))
-    const result = await this.host.sumi.acpStart(this.agent.id)
+    const result = await this.host.sumi.acpStart(this.tab, this.agent.id)
     note.remove()
     this.started(result)
   }
@@ -127,7 +128,7 @@ class Thread {
         if (method.description) b.title = method.description
         b.addEventListener('click', async () => {
           for (const other of actions.querySelectorAll('button')) other.disabled = true
-          const next = await sumi.acpAuthenticate(this.agent.id, method.id)
+          const next = await sumi.acpAuthenticate(this.tab, method.id)
           card.remove()
           this.started(next)
         })
@@ -157,7 +158,7 @@ class Thread {
     this.setState('busy')
     await this.host.beforeSend()
     // 返事の区切りはここでは閉じない。main からの知らせは、完了の返事より後に届くことがある。
-    const res = await this.host.sumi.acpPrompt(this.agent.id, [{ type: 'text', text }, ...this.host.context()])
+    const res = await this.host.sumi.acpPrompt(this.tab, [{ type: 'text', text }, ...this.host.context()])
     const { tr } = this.host
     if (res.error && this.isBusy()) this.note(tr('ai.error'), res.error)
     else if (res.stopReason === 'cancelled') this.note(tr('ai.stopped'))
@@ -173,7 +174,7 @@ class Thread {
 
   cancel(): void {
     if (this.state !== 'busy') return
-    this.host.sumi.acpCancel(this.agent.id)
+    this.host.sumi.acpCancel(this.tab)
     for (const box of this.pending.values()) box.replaceChildren(element('span', 'permission-chosen', this.host.tr('ai.stopped')))
     this.pending.clear()
   }
@@ -391,20 +392,21 @@ export class ThreadPane {
     private host: HTMLElement,
     private h: ThreadHost
   ) {
-    h.sumi.onAcpUpdate((id, u) => this.threads.get(id)?.update(u))
-    h.sumi.onAcpPermission((id, key, request) => {
-      const thread = this.threads.get(id)
+    h.sumi.onAcpUpdate((tab, u) => this.threads.get(tab)?.update(u))
+    h.sumi.onAcpPermission((tab, key, request) => {
+      const thread = this.threads.get(tab)
       if (thread) thread.permission(key, request)
       else h.sumi.acpAnswer(key, null)
     })
-    h.sumi.onAcpExit((id, detail) => this.threads.get(id)?.exited(detail))
+    h.sumi.onAcpExit((tab, detail) => this.threads.get(tab)?.exited(detail))
   }
 
-  show(agent: AgentConfig, focus = true): void {
-    let thread = this.threads.get(agent.id)
+  // そのタブを初めて出すときは、エージェントを起動して新しいセッションを作る
+  show(tab: string, agent: AgentConfig, focus = true): void {
+    let thread = this.threads.get(tab)
     if (!thread) {
-      thread = new Thread(agent, this.h)
-      this.threads.set(agent.id, thread)
+      thread = new Thread(tab, agent, this.h)
+      this.threads.set(tab, thread)
       this.host.append(thread.el)
       void thread.start()
     }
@@ -429,17 +431,18 @@ export class ThreadPane {
     for (const t of this.threads.values()) t.applyLanguage()
   }
 
-  // エージェントの設定を変えたとき・消したとき
-  drop(id: string): void {
-    const thread = this.threads.get(id)
+  // タブを閉じたとき・エージェントの設定を変えたとき。main 側のセッションも閉じる（もう止まっていれば何もしない）。
+  drop(tab: string): void {
+    const thread = this.threads.get(tab)
     if (!thread) return
+    this.h.sumi.acpClose(tab)
     thread.el.remove()
-    this.threads.delete(id)
+    this.threads.delete(tab)
     if (this.current === thread) this.current = null
   }
 
-  // フォルダを替えたとき。main 側のエージェントはもう止まっている。
+  // フォルダを替えたとき・AI を切ったとき
   reset(): void {
-    for (const id of [...this.threads.keys()]) this.drop(id)
+    for (const tab of [...this.threads.keys()]) this.drop(tab)
   }
 }

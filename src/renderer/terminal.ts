@@ -5,7 +5,7 @@ import { WebLinksAddon } from '@xterm/addon-web-links'
 import '@xterm/xterm/css/xterm.css'
 import type { SumiApi } from '../preload'
 
-// 端末のエージェント（ACP に対応していない CLI）を、端末ごと埋め込む。セッションはエージェントごとに生かしておく。
+// 端末のエージェント（ACP に対応していない CLI）を、端末ごと埋め込む。端末は柱のタブごとに持ち、切り替えても生かしておく。
 
 // 16 色は CLI が使う。紙の明るい地でも読めるよう、明るさごとに濃さを変える。
 const LIGHT_ANSI: ITheme = {
@@ -26,6 +26,7 @@ const DARK_ANSI: ITheme = {
 const NEWLINE = '\x1b\r'
 
 interface Session {
+  agent: string
   term: Terminal
   fit: FitAddon
   el: HTMLElement
@@ -48,7 +49,7 @@ function theme(): ITheme {
 
 export class TerminalPane {
   private sessions = new Map<string, Session>()
-  agent = ''
+  private current = ''
 
   constructor(
     private host: HTMLElement,
@@ -60,18 +61,18 @@ export class TerminalPane {
     sumi.onTermExit((id) => this.onExit(id))
   }
 
-  // 柱が見えているときに呼ぶ。その CLI を初めて出すときは起動する。
-  async show(agent: string, focus = true): Promise<void> {
-    this.agent = agent
-    const session = this.session(agent)
-    for (const [a, s] of this.sessions) s.el.hidden = a !== agent
+  // 柱が見えているときに呼ぶ。そのタブを初めて出すときは CLI を起動する。
+  async show(tab: string, agent: string, focus = true): Promise<void> {
+    this.current = tab
+    const session = this.session(tab, agent)
+    for (const [t, s] of this.sessions) s.el.hidden = t !== tab
     this.fitCurrent()
     if (focus) session.term.focus()
-    if (session.state === 'idle') await this.start(agent, session)
+    if (session.state === 'idle') await this.start(tab, session)
   }
 
   focus(): void {
-    this.sessions.get(this.agent)?.term.focus()
+    this.sessions.get(this.current)?.term.focus()
   }
 
   hasFocus(): boolean {
@@ -80,7 +81,7 @@ export class TerminalPane {
 
   // チップの中身を入力欄に貼り込む（CLI が対応していれば括弧付きペーストになり、送信はされない）
   insert(text: string): void {
-    const session = this.sessions.get(this.agent)
+    const session = this.sessions.get(this.current)
     if (session?.state !== 'running') return
     session.term.paste(text)
     session.term.focus()
@@ -90,30 +91,23 @@ export class TerminalPane {
     for (const s of this.sessions.values()) s.term.options.theme = theme()
   }
 
-  hide(): void {
-    for (const s of this.sessions.values()) s.el.hidden = true
-  }
-
-  // エージェントの設定を変えたとき・消したとき
-  drop(id: string): void {
-    const s = this.sessions.get(id)
+  // タブを閉じたとき・エージェントの設定を変えたとき。main 側の端末も止める（もう止まっていれば何もしない）。
+  drop(tab: string): void {
+    const s = this.sessions.get(tab)
     if (!s) return
+    this.sumi.termClose(tab)
     s.term.dispose()
     s.el.remove()
-    this.sessions.delete(id)
+    this.sessions.delete(tab)
   }
 
-  // フォルダを替えたとき。main 側のセッションはもう止まっている。
+  // フォルダを替えたとき・AI を切ったとき
   reset(): void {
-    for (const s of this.sessions.values()) {
-      s.term.dispose()
-      s.el.remove()
-    }
-    this.sessions.clear()
+    for (const tab of [...this.sessions.keys()]) this.drop(tab)
   }
 
-  private session(agent: string): Session {
-    const existing = this.sessions.get(agent)
+  private session(tab: string, agent: string): Session {
+    const existing = this.sessions.get(tab)
     if (existing) return existing
     const el = document.createElement('div')
     el.className = 'ai-term'
@@ -132,36 +126,36 @@ export class TerminalPane {
     term.unicode.activeVersion = '11'
     term.loadAddon(new WebLinksAddon((_e, url) => this.sumi.openLink(url)))
     term.open(el)
-    const session: Session = { term, fit, el, state: 'idle' }
+    const session: Session = { agent, term, fit, el, state: 'idle' }
     term.attachCustomKeyEventHandler((e) => {
       if (e.key !== 'Enter' || !e.shiftKey || e.metaKey) return true
-      if (e.type === 'keydown' && session.state === 'running') this.sumi.termInput(agent, NEWLINE)
+      if (e.type === 'keydown' && session.state === 'running') this.sumi.termInput(tab, NEWLINE)
       return false
     })
     term.onData((data) => {
-      if (session.state === 'running') this.sumi.termInput(agent, data)
+      if (session.state === 'running') this.sumi.termInput(tab, data)
       else if (session.state === 'exited' && data === '\r') {
         term.reset()
-        void this.start(agent, session)
+        void this.start(tab, session)
       }
     })
     term.onResize(({ cols, rows }) => {
-      if (session.state === 'running') this.sumi.termResize(agent, cols, rows)
+      if (session.state === 'running') this.sumi.termResize(tab, cols, rows)
     })
-    this.sessions.set(agent, session)
+    this.sessions.set(tab, session)
     return session
   }
 
-  private async start(agent: string, session: Session): Promise<void> {
+  private async start(tab: string, session: Session): Promise<void> {
     session.state = 'running'
-    const error = await this.sumi.termStart(agent, session.term.cols, session.term.rows)
+    const error = await this.sumi.termStart(tab, session.agent, session.term.cols, session.term.rows)
     if (!error) return
     session.state = 'exited'
     session.term.write(`\x1b[2m${error}\x1b[0m\r\n`)
   }
 
-  private onExit(agent: string): void {
-    const session = this.sessions.get(agent)
+  private onExit(tab: string): void {
+    const session = this.sessions.get(tab)
     if (!session) return
     session.state = 'exited'
     session.term.write(`\r\n\x1b[2m${this.messages().exited}\x1b[0m\r\n`)
@@ -169,7 +163,7 @@ export class TerminalPane {
 
   // 見えていない（幅 0 の）ときに合わせると桁数が壊れるので、見えている端末だけ合わせる
   private fitCurrent(): void {
-    const session = this.sessions.get(this.agent)
+    const session = this.sessions.get(this.current)
     if (!session || session.el.hidden || this.host.clientWidth === 0) return
     session.fit.fit()
   }

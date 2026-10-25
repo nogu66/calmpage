@@ -246,9 +246,13 @@ await page.locator(`${thread} .composer-send`).click()
 const stopped = await waitFor((t) => [...document.querySelectorAll(`${t} .note-title`)].some((n) => n.textContent === '中断しました'), thread, 8000)
 check('ACP: 中断', stopped)
 
-// 端末のエージェントへ切り替える
-await page.locator('#agent-picker').click()
-await page.locator('#agent-menu .agent-item', { hasText: 'Shell' }).click()
+// 「+」から端末のエージェントのタブを開く
+const openTab = async (name) => {
+  await page.locator('#new-tab').click()
+  await page.locator('#agent-menu .agent-item', { hasText: name }).click()
+}
+const tabNames = () => page.locator('#ai-tabs .ai-tab-main').allTextContents()
+await openTab('Shell')
 const termText = () => page.evaluate(() => document.querySelector('.ai-term:not([hidden]) .xterm-rows')?.innerText ?? '')
 const prompt = await waitFor(() => /%/.test(document.querySelector('.ai-term:not([hidden]) .xterm-rows')?.innerText ?? ''), null)
 await page.keyboard.type('echo sumi-$((40+2))')
@@ -259,9 +263,8 @@ const inserted = await waitFor((name) => (document.querySelector('.ai-term:not([
 check('端末のエージェントに切り替える', prompt && echoed && inserted && (await page.locator('#ai-threads').isHidden()), (await termText()).replace(/\n/g, ' ').slice(-80))
 
 
-// 戻すと、ACP のスレッドは残っている
-await page.locator('#agent-picker').click()
-await page.locator('#agent-menu .agent-item', { hasText: 'Fake ACP' }).click()
+// タブを戻すと、ACP のスレッドは残っている
+await page.locator('#ai-tabs .ai-tab-main', { hasText: /^Fake ACP$/ }).click()
 const replies = await page.locator(`${thread} .msg-agent`).allTextContents()
 // 自分の発言は右寄せ、エージェントの返事は左から
 const sides = await page.evaluate((t) => {
@@ -277,6 +280,36 @@ check(
   replies.map((r) => r.slice(0, 24)).join(' / ')
 )
 
+// 同じエージェントをもう 1 本開く: 別のセッションになり、返事は自分のタブにだけ届く
+await openTab('Fake ACP')
+const freshReady = await waitFor((t) => !!document.querySelector(`${t} .thread-hint`), thread)
+const freshEmpty = (await page.locator(`${thread} .msg-user`).count()) === 0
+before = await send('hello from tab 2')
+await waitFor(([t, n]) => document.querySelectorAll(`${t} .msg-agent`).length > n && /Received/.test([...document.querySelectorAll(`${t} .msg-agent`)].pop().textContent), [thread, before])
+const secondTabReply = await lastAgentText()
+await page.locator('#ai-tabs .ai-tab-main', { hasText: /^Fake ACP$/ }).click()
+const firstTabCount = await page.locator(`${thread} .msg-agent`).count()
+check(
+  '同じ ACP のエージェントを 2 本開く',
+  freshReady && freshEmpty && /^Received/.test(secondTabReply) && firstTabCount === 4,
+  `${(await tabNames()).join(' | ')} / 1 本目の返事 ${firstTabCount} 件`
+)
+
+// 端末も 2 本目を開き、× で閉じると隣のタブへ移る
+await openTab('Shell')
+const shellTwo = await waitFor(() => /%/.test(document.querySelector('.ai-term:not([hidden]) .xterm-rows')?.innerText ?? ''), null)
+const namesBefore = await tabNames()
+await page.locator('#ai-tabs .ai-tab', { hasText: 'Shell 2' }).locator('.ai-tab-close').click()
+const namesAfter = await tabNames()
+const activeAfter = await page.locator('#ai-tabs .ai-tab.active .ai-tab-main').textContent()
+check(
+  '端末を 2 本開いて閉じる',
+  shellTwo && namesBefore.join(',') === 'Fake ACP,Shell,Fake ACP 2,Shell 2' && namesAfter.join(',') === 'Fake ACP,Shell,Fake ACP 2' && activeAfter === 'Fake ACP 2',
+  `${namesBefore.join(',')} → ${namesAfter.join(',')}（選択: ${activeAfter}）`
+)
+await page.locator('#ai-tabs .ai-tab', { hasText: 'Fake ACP 2' }).locator('.ai-tab-close').click()
+await page.locator('#ai-tabs .ai-tab-main', { hasText: /^Fake ACP$/ }).click()
+
 // 設定からエージェントを追加・削除する
 await page.locator('#open-settings').click()
 await page.locator('#agent-form-name').fill('Extra')
@@ -284,7 +317,7 @@ await page.locator('#agent-form-command').fill('npx -y "some agent" --acp')
 await page.locator('#agent-form button[type="submit"]').click()
 await page.waitForTimeout(300)
 const added = await page.evaluate(() => [...document.querySelectorAll('#agent-list .agent-row')].map((r) => r.textContent))
-const pickerName = await page.locator('#agent-name').textContent()
+const menuNames = await page.locator('#agent-menu .agent-item').allTextContents()
 await page.locator('#agent-list .agent-row', { hasText: 'Extra' }).locator('.agent-remove').click()
 await page.waitForTimeout(300)
 const remaining = await page.locator('#agent-list .agent-row').count()
@@ -316,15 +349,14 @@ await page.screenshot({ path: join(shots, '9-agents.png') })
 await page.keyboard.press('Escape')
 
 // 最初からある Terminal は、利用者のログインシェルを開く
-await page.locator('#agent-picker').click()
-await page.locator('#agent-menu .agent-item', { hasText: 'Terminal' }).click()
+await openTab('Terminal')
 await page.waitForTimeout(1500)
 await page.keyboard.type('echo login-$((1+1)) $0')
 await page.keyboard.press('Enter')
 const login = await waitFor(() => /login-2 -?\S*sh/.test(document.querySelector('.ai-term:not([hidden]) .xterm-rows')?.innerText ?? ''), null, 15_000)
 check('Terminal でログインシェルが開く', login, (await termText()).replace(/\n/g, ' ').slice(-60))
 
-check('エージェントの追加と削除', added.length === 3 && added.some((r) => r.includes('npx -y some agent --acp')) && pickerName === 'Extra' && remaining === 2, `${added.join(' | ')} → 残り ${remaining}`)
+check('エージェントの追加と削除', added.length === 3 && added.some((r) => r.includes('npx -y some agent --acp')) && menuNames.some((n) => n.startsWith('Extra')) && remaining === 2, `${added.join(' | ')} → 残り ${remaining}`)
 
 await clickMenu('AI パネル')
 await page.waitForTimeout(200)
