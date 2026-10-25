@@ -149,7 +149,26 @@ const en = {
 
   'build.overfull': 'Overfull box ({amount})',
   'build.noPages': 'No pages of output.',
-  'build.noLatexmk': 'Cannot start latexmk: {detail}'
+  'build.noLatexmk': 'Cannot start latexmk: {detail}',
+
+  // 班 2: コンパイル
+  'status.cancelled': 'Stopped',
+  'status.stop': 'Stop',
+  'status.stopHint': 'Stop compiling (⌘.)',
+  'status.cleaned': 'Removed auxiliary files',
+  'status.cleanFailed': 'Could not remove auxiliary files',
+  'menu.cancelCompile': 'Stop Compiling',
+  'menu.cleanAux': 'Remove Auxiliary Files',
+  'log.title': 'Log',
+  'log.search': 'Search the log',
+  'log.noMatch': 'No matches',
+  'log.empty': 'The log appears here after you compile.',
+  'settings.compile': 'Compiling',
+  'settings.engine': 'Default engine',
+  'settings.engineHint': 'Used when the document has no “% !TEX program” line and the folder has no .latexmkrc.',
+  'engine.auto': 'Auto',
+  'settings.shellEscape': 'Allow shell escape',
+  'settings.shellEscapeHint': 'Lets a document run any program on your Mac. Some packages need it. Turn it on only for documents you trust.'
 } satisfies Record<string, Entry>
 
 export type Key = keyof typeof en
@@ -296,7 +315,26 @@ const ja: Record<Key, Entry> = {
 
   'build.overfull': 'はみ出し ({amount})',
   'build.noPages': 'PDF が 1 ページも出力されませんでした',
-  'build.noLatexmk': 'latexmk を起動できません: {detail}'
+  'build.noLatexmk': 'latexmk を起動できません: {detail}',
+
+  // 班 2: コンパイル
+  'status.cancelled': '中止しました',
+  'status.stop': '中止',
+  'status.stopHint': 'コンパイルを中止 (⌘.)',
+  'status.cleaned': '中間ファイルを消しました',
+  'status.cleanFailed': '中間ファイルを消せませんでした',
+  'menu.cancelCompile': 'コンパイルを中止',
+  'menu.cleanAux': '中間ファイルを消す',
+  'log.title': 'ログ',
+  'log.search': 'ログを検索',
+  'log.noMatch': '見つかりません',
+  'log.empty': 'コンパイルすると、ここにログが出ます。',
+  'settings.compile': 'コンパイル',
+  'settings.engine': '既定の処理系',
+  'settings.engineHint': '書類に「% !TEX program」の行がなく、フォルダに .latexmkrc もないときに使います。',
+  'engine.auto': '自動',
+  'settings.shellEscape': 'shell-escape を許す',
+  'settings.shellEscapeHint': '書類から Mac の任意のプログラムを動かせるようになります。必要なパッケージもありますが、信頼できる書類のときだけ入れてください。'
 }
 
 const DICTS: Record<Lang, Record<Key, Entry>> = { en, ja }

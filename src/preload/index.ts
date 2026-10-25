@@ -18,6 +18,8 @@ const api = {
   readFile: (path: string): Promise<string> => ipcRenderer.invoke('file:read', path),
   writeFile: (path: string, content: string): Promise<void> => ipcRenderer.invoke('file:write', path, content),
   requestBuild: (file: string): void => ipcRenderer.send('build:request', file),
+  cancelBuild: (): void => ipcRenderer.send('build:cancel'),
+  cleanBuild: (file: string): Promise<boolean | null> => ipcRenderer.invoke('build:clean', file),
   readPdf: (path: string): Promise<Uint8Array> => ipcRenderer.invoke('pdf:read', path),
   openPdfExternally: (): Promise<void> => ipcRenderer.invoke('pdf:open-external'),
   forwardSync: (file: string, line: number, column: number): Promise<SyncBox | null> =>
@@ -43,6 +45,7 @@ const api = {
   onFileChanged: (cb: (path: string, content: string) => void) => on('file:changed', cb),
   onBuildStarted: (cb: (root: string) => void) => on('build:started', cb),
   onBuildFinished: (cb: (result: BuildResult | null, file: string, error?: string) => void) => on('build:finished', cb),
+  onBuildCancelled: (cb: () => void) => on('build:cancelled', cb),
   onMenu: (cb: (command: string) => void) => on('menu', cb),
   onSettings: (cb: (settings: Settings) => void) => on('settings:changed', cb),
   onTermData: (cb: (id: string, data: string) => void) => on('term:data', cb),
