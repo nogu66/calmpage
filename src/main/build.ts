@@ -150,7 +150,8 @@ export async function resolveRoot(file: string, current: string | null, projectF
   if (hasDocumentClass(src)) return file
 
   if (current && dependencies.get(current)?.has(file)) return current
-  for (const [root, deps] of dependencies) if (deps.has(file)) return root
+  // 記録は窓をまたいで 1 つなので、ほかの窓（ほかのフォルダ）の本体は選ばない
+  for (const [root, deps] of dependencies) if (deps.has(file) && projectFiles.includes(root)) return root
 
   // まだ一度も組んでいないとき: このファイルを読み込む書類を探す（.tex は \input、.bib は \bibliography など）。
   // 見つけた書類が部品なら、その本体をたどる

@@ -1,25 +1,25 @@
-import { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, session, shell } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, screen, session, shell, type BaseWindow, type WebContents } from 'electron'
 import { copyFileSync, existsSync, mkdirSync, statSync } from 'node:fs'
 import { readFile, writeFile } from 'node:fs/promises'
 import { basename, dirname, join, sep } from 'node:path'
-import { AcpAgents } from './acp'
-import { backwardSync, build, clean, forwardSync, resolveRoot, type BuildResult } from './build'
-import { createFile, createFolder, FolderWatcher, importData, importFile, listCompletionFiles, listProjectEntries, listProjectFiles, renamePath } from './files'
+import { backwardSync, forwardSync } from './build'
+import { createFile, createFolder, importData, importFile, listCompletionFiles, listProjectEntries, listProjectFiles, renamePath } from './files'
 import { isEmptyFolder, TEMPLATE_IDS, writeTemplate, type TemplateId } from './templates'
 import { listVersions, readVersion, recordVersion } from './history'
 import { loadRegistry } from './registry'
 import { replaceInFiles, searchFiles } from './search'
 import { warmUpShellEnv } from './shell-env'
-import { Terminals } from './terminals'
+import { answer, Workspace } from './workspace'
 import { t, type Key } from '../shared/i18n'
 import { isText } from '../shared/paths'
 import type { SearchOptions } from '../shared/search'
-import { loadSettings, saveSettings, type AgentConfig, type Palette, type Settings, type Theme } from './settings'
+import { loadSettings, saveSettings, type AgentConfig, type Palette, type Settings, type Theme, type WindowState } from './settings'
 
 // Finder から起動するとシェルの PATH を引き継がないため、TeX と Homebrew の場所を足しておく。
 process.env.PATH = ['/Library/TeX/texbin', '/opt/homebrew/bin', '/usr/local/bin', process.env.PATH].join(':')
 
 // 自動テスト用: 設定の保存先と、起動時に開くパスを差し替えられる。
+const testing = !!process.env.CALMPAGE_USER_DATA
 if (process.env.CALMPAGE_USER_DATA) app.setPath('userData', process.env.CALMPAGE_USER_DATA)
 // 前の名前（0.2.0 までは Sumitex、0.1.0 までは Sumi）の設定を一度だけ引き継ぐ。新しい方を優先する
 else {
@@ -31,223 +31,52 @@ else {
   }
 }
 
-let win: BrowserWindow | null = null
-let folder: string | null = loadSettings().folder
-let currentRoot: string | null = null
-let currentPdf: string | null = null
-let pendingOpen: string | null = process.env.CALMPAGE_OPEN ?? null
+// ---------- 窓 ----------
 
-const watcher = new FolderWatcher(
-  (path, content, source) => {
-    win?.webContents.send('file:changed', path, content, source)
-    void recordVersion(path, content) // AI などの書き換えも、あとで戻せるように
-  },
-  () => win?.webContents.send('files:changed')
-)
-const terminals = new Terminals(send)
-const acpAgents = new AcpAgents(send)
+// 開いている窓（開いた順）。front はいま前にある窓で、メニューの操作と Finder から開いたものの行き先になる
+const workspaces: Workspace[] = []
+let front: Workspace | null = null
+// ⌘Q で、すべての窓が「閉じてよい」と答えたら立てる。立っている間は close と before-quit を止めない
+let quitting = false
+// 起動が終わる前に Finder から渡されたもの
+const pendingOpens: string[] = []
+
+// 自動テスト用: いま前にある窓。テストの窓はフォーカスを取らないので、前に出したかは focus では確かめられない
+if (testing) (globalThis as { __calmpageFront?: () => number | null }).__calmpageFront = () => front?.win.id ?? null
+
+function wsOf(sender: WebContents): Workspace | null {
+  return workspaces.find((ws) => ws.contentsId === sender.id) ?? null
+}
+
+// メニューの行き先。キーで選んだときはフォーカスのある窓、なければ最後に前にあった窓
+function target(window?: BaseWindow): Workspace | null {
+  return workspaces.find((ws) => window && ws.win.id === window.id) ?? front ?? workspaces.at(-1) ?? null
+}
 
 function agentConfig(id: string): AgentConfig | undefined {
   return loadSettings().agents.find((a) => a.id === id)
-}
-
-function stopAgents(): void {
-  terminals.stopAll()
-  acpAgents.stopAll()
-}
-
-function send(channel: string, ...args: unknown[]): void {
-  win?.webContents.send(channel, ...args)
 }
 
 function tr(key: Key, params?: Record<string, string | number>): string {
   return t(loadSettings().language, key, params)
 }
 
-// ---------- 画面への問い合わせ ----------
-
-// main から画面に聞いて、答えを待つ。画面が固まっていたら待ちすぎない（閉じられなくなるので）
-let nextRequest = 0
-const pending = new Map<number, (value: unknown) => void>()
-
-function ask<T>(channel: string, fallback: T, ...args: unknown[]): Promise<T> {
-  if (!win || win.webContents.isCrashed()) return Promise.resolve(fallback)
-  const id = ++nextRequest
-  return new Promise<T>((resolve) => {
-    const timer = setTimeout(() => {
-      pending.delete(id)
-      resolve(fallback)
-    }, 5000)
-    pending.set(id, (value) => {
-      clearTimeout(timer)
-      resolve(value as T)
-    })
-    send(channel, id, ...args)
-  })
+// 画面に渡す設定。folder / file / tabs だけは、その窓の値にする
+function view(ws: Workspace): Settings {
+  return { ...loadSettings(), folder: ws.folder, file: ws.file, tabs: ws.tabs }
 }
 
-interface Unsaved {
-  path: string
-  error: string | null
+// 開いている窓を、次の起動で開き直せるように書いておく。フォルダを開いていない窓は覚えない。
+// 1 つめの窓の値は folder / file / tabs にも書く（前の版に戻しても、そのフォルダが開くように）
+function persistWindows(): void {
+  const windows = workspaces.map((ws) => ws.state()).filter((s): s is WindowState => !!s)
+  const first = windows[0]
+  saveSettings({ windows, folder: first?.folder ?? null, file: first?.file ?? null, tabs: first?.tabs ?? [] })
 }
 
-// 閉じる・終了する・フォルダやファイルを替える前に、未保存の変更を片付ける。先へ進んでよければ true。
-// 自動コンパイルなら黙って保存し、保存できなかったときや自動コンパイルを切っているときだけ聞く。
-// 重なったら順に聞く（ファイルの切り替え中に ⌘Q が来ても、ほかの書類を確かめずに終わらないように）
-let confirming: Promise<unknown> = Promise.resolve()
-
-function confirmUnsaved(paths: string[] | null = null, save = false): Promise<boolean> {
-  const next = confirming.then(() => settleUnsaved(paths, save))
-  confirming = next.catch(() => {})
-  return next
-}
-
-async function settleUnsaved(paths: string[] | null, save: boolean): Promise<boolean> {
-  let left = await ask<Unsaved[]>('app:flush', [], save ? 'save' : 'auto', paths)
-  while (left.length && win) {
-    const failed = left.find((u) => u.error)
-    const name = basename(left[0].path)
-    const { response } = await dialog.showMessageBox(win, {
-      type: 'warning',
-      message: failed ? tr('unsaved.failed', { name: basename(failed.path) }) : left.length === 1 ? tr('unsaved.one', { name }) : tr('unsaved.many', { n: left.length }),
-      detail: failed ? `${failed.error}\n\n${tr('unsaved.detail')}` : tr('unsaved.detail'),
-      buttons: [tr('unsaved.save'), tr('unsaved.dontSave'), tr('unsaved.cancel')],
-      defaultId: 0,
-      cancelId: 2
-    })
-    if (response === 2) return false
-    if (response === 1) {
-      await ask('app:flush', [], 'discard', left.map((u) => u.path))
-      return true
-    }
-    left = await ask<Unsaved[]>('app:flush', [], 'save', left.map((u) => u.path))
-  }
-  return true
-}
-
-// 最近開いたフォルダ。macOS の「最近使った項目」（Dock の右クリックなど）にも載せる。
-// メニューの一覧は自前で持つ: フォルダは書類の種類として登録していないので、標準の「最近使ったもの」の
-// メニュー（role: recentDocuments）には出ないことがあるため。
-const RECENT_MAX = 10
-
-function addRecent(path: string): void {
-  const recent = [path, ...loadSettings().recent.filter((p) => p !== path)].slice(0, RECENT_MAX)
-  saveSettings({ recent })
-  // 自動テストでは、手元の Mac の「最近使った項目」を汚さない
-  if (!process.env.CALMPAGE_USER_DATA) app.addRecentDocument(path)
-  buildMenu()
-}
-
-function clearRecent(): void {
-  saveSettings({ recent: [] })
-  if (!process.env.CALMPAGE_USER_DATA) app.clearRecentDocuments()
-  buildMenu()
-}
-
-function recentItems(tr: (key: Key) => string): Electron.MenuItemConstructorOptions[] {
-  const recent = loadSettings().recent.filter((p) => existsSync(p))
-  // 同じ名前のフォルダが並ぶときだけ、親のフォルダ名を添えて見分けられるようにする
-  const label = (p: string): string =>
-    recent.filter((q) => basename(q) === basename(p)).length > 1 ? `${basename(p)} — ${basename(dirname(p))}` : basename(p)
-  const items: Electron.MenuItemConstructorOptions[] = recent.map((p) => ({ label: label(p), click: () => void openPath(p) }))
-  if (items.length) items.push({ type: 'separator' })
-  items.push({ label: tr('menu.clearRecent'), enabled: recent.length > 0, click: clearRecent })
-  return items
-}
-
-function setFolder(next: string): void {
-  if (next !== folder) stopAgents() // AI は開いているフォルダで動くので、替えたら止める
-  if (next !== folder) cancelBuild()
-  folder = next
-  watcher.watch(next)
-  saveSettings({ folder: next })
-  addRecent(next)
-}
-
-// 組版は 1 本ずつ。実行中に来た依頼は最後の 1 件だけ覚えておき、終わったら続けて組む。
-// 中間ファイルの削除もこの順番待ちに入れる（組んでいる最中に消さないように）。
-let building = false
-let queued: string | null = null
-let stopper: AbortController | null = null
-
-async function requestBuild(file: string): Promise<void> {
-  if (building) {
-    queued = file
-    return
-  }
-  building = true
-  const stop = (stopper = new AbortController())
-  try {
-    const files = folder ? await listProjectFiles(folder) : []
-    const root = await resolveRoot(file, currentRoot, files)
-    if (stop.signal.aborted) return void send('build:cancelled')
-    if (!root) {
-      currentPdf = null
-      send('build:finished', null, file)
-      return
-    }
-    // 別の書類に移ったら、前の書類の PDF を ⇧⌘O や SyncTeX の相手にしない
-    if (root !== currentRoot) currentPdf = null
-    send('build:started', root)
-    const result: BuildResult = await build(root, stop.signal)
-    currentRoot = root
-    if (result.cancelled) return void send('build:cancelled')
-    if (result.pdf) currentPdf = result.pdf
-    send('build:finished', result, file)
-  } catch (err) {
-    send('build:finished', null, file, String(err))
-  } finally {
-    release()
-  }
-}
-
-function release(): void {
-  building = false
-  stopper = null
-  if (queued) {
-    const next = queued
-    queued = null
-    void requestBuild(next)
-  }
-}
-
-// 中止したら待ち行列も捨てる（止めた直後に、溜まっていた依頼で組み直さないように）
-function cancelBuild(): void {
-  queued = null
-  stopper?.abort()
-}
-
-async function cleanAux(file: string): Promise<boolean | null> {
-  cancelBuild()
-  while (building) await new Promise((r) => setTimeout(r, 50))
-  building = true
-  try {
-    const root = await resolveRoot(file, currentRoot, folder ? await listProjectFiles(folder) : [])
-    return root ? await clean(root) : null
-  } catch {
-    return false
-  } finally {
-    release()
-  }
-}
-
-async function openPath(path: string): Promise<void> {
-  let isDir = false
-  try {
-    isDir = statSync(path).isDirectory()
-  } catch {
-    return
-  }
-  // フォルダが替わるときだけ、先に未保存を片付ける（同じフォルダのファイルなら画面の側で保存する）
-  const next = isDir ? path : folder && path.startsWith(folder + sep) ? folder : dirname(path)
-  if (next !== folder && !(await confirmUnsaved())) return
-  if (isDir) {
-    setFolder(path)
-    send('folder:opened', path, null)
-  } else {
-    if (!folder || !path.startsWith(folder + sep)) setFolder(dirname(path))
-    send('folder:opened', folder, path)
-  }
+function workspaceChanged(ws: Workspace, folderOpened: boolean): void {
+  if (folderOpened && ws.folder) addRecent(ws.folder)
+  persistWindows()
 }
 
 // 明るさは nativeTheme で切り替える。画面の CSS（prefers-color-scheme）とウィンドウの枠が一緒に変わる。
@@ -262,29 +91,258 @@ function groundColor(): string {
   return GROUND[loadSettings().palette][nativeTheme.shouldUseDarkColors ? 1 : 0]
 }
 
-// 設定の変更はここに集める。メニューと設定画面のどちらから変えても、画面へ同じ知らせが届く。
+type Bounds = NonNullable<WindowState['bounds']>
+
+// 覚えていた位置が、今つないでいる画面のどれかに収まっているときだけ使う（外した画面の上に開かないように）
+function onScreen(b: Bounds): boolean {
+  return screen.getAllDisplays().some(({ workArea: a }) => b.x < a.x + a.width - 80 && b.x + b.width > a.x + 80 && b.y >= a.y - 10 && b.y < a.y + a.height - 80)
+}
+
+function initialBounds(state: WindowState | null): Partial<Bounds> {
+  if (state?.bounds && onScreen(state.bounds)) return state.bounds
+  // 新しい窓は、前の窓から少しずらして重ねる（macOS のほかのアプリと同じように）
+  const from = front && !front.win.isDestroyed() ? front.win.getNormalBounds() : null
+  if (from && onScreen({ ...from, x: from.x + 22, y: from.y + 22 })) return { ...from, x: from.x + 22, y: from.y + 22 }
+  return { width: 1480, height: 920 }
+}
+
+// 窓を前に出す。自動テスト中は手元の入力を奪わないよう、重なりだけ前にしてフォーカスは移さない
+function reveal(ws: Workspace): void {
+  front = ws
+  if (ws.win.isDestroyed()) return
+  if (ws.win.isMinimized()) ws.win.restore()
+  if (testing) {
+    ws.win.showInactive()
+    ws.win.moveTop()
+  } else {
+    ws.win.show()
+    ws.win.focus()
+  }
+}
+
+// fresh: 起動時や Finder から開いたもの（「最近使ったもの」に載せる）。復元した窓は載せない
+function openWindow(state: WindowState | null, fresh = false): Workspace {
+  const win = new BrowserWindow({
+    ...initialBounds(state),
+    minWidth: 900,
+    minHeight: 560,
+    title: 'Calmpage',
+    titleBarStyle: 'hiddenInset',
+    trafficLightPosition: { x: 14, y: 13 },
+    backgroundColor: groundColor(),
+    // 自動テスト中は最前面に出さない（手元で打っているキー入力をエディターが奪わないように）
+    show: !testing,
+    webPreferences: {
+      preload: join(__dirname, '../preload/index.js'),
+      sandbox: true,
+      contextIsolation: true,
+      backgroundThrottling: false
+    }
+  })
+  const ws = new Workspace(win, state, workspaceChanged)
+  workspaces.push(ws)
+  front = ws
+  if (fresh && ws.folder) addRecent(ws.folder)
+  // タイトルはフォルダの名前にする（index.html の <title> で上書きさせない）
+  win.on('page-title-updated', (e) => e.preventDefault())
+  win.on('focus', () => (front = ws))
+  let moved: NodeJS.Timeout | undefined
+  const remember = (): void => {
+    clearTimeout(moved)
+    moved = setTimeout(persistWindows, 500)
+  }
+  win.on('resized', remember)
+  win.on('moved', remember)
+  win.on('close', (e) => {
+    if (quitting || ws.released) {
+      // 最後の窓を閉じるとアプリも終わる。その窓は次の起動で開き直す
+      if (!quitting && workspaces.length === 1) persistWindows()
+      return
+    }
+    e.preventDefault()
+    void ws.release(() => win.close())
+  })
+  win.on('closed', () => {
+    clearTimeout(moved)
+    ws.dispose()
+    workspaces.splice(workspaces.indexOf(ws), 1)
+    if (front === ws) {
+      front = null
+      front = target(BrowserWindow.getFocusedWindow() ?? undefined)
+    }
+    // 閉じた窓は次の起動で開かない。終了のときと最後の窓は、閉じる前の一覧のままにする
+    if (!quitting && workspaces.length) persistWindows()
+  })
+  // ファイルを窓に落としたとき、その場所へ移ってしまわないように
+  win.webContents.on('will-navigate', (e) => e.preventDefault())
+  if (testing) win.showInactive()
+  if (process.env.ELECTRON_RENDERER_URL) void win.loadURL(process.env.ELECTRON_RENDERER_URL)
+  else void win.loadFile(join(__dirname, '../renderer/index.html'))
+  return ws
+}
+
+// ---------- 開く ----------
+
+function isDirectory(path: string): boolean | null {
+  try {
+    return statSync(path).isDirectory()
+  } catch {
+    return null
+  }
+}
+
+// そのパスをもう開いている窓。フォルダなら同じフォルダの窓、ファイルならそれを含むフォルダの窓（prefer を先に見る）
+function ownerOf(path: string, isDir: boolean, prefer: Workspace | null): Workspace | null {
+  const holds = (ws: Workspace): boolean => !!ws.folder && (isDir ? ws.folder === path : path.startsWith(ws.folder + sep))
+  if (prefer && holds(prefer)) return prefer
+  return workspaces.find(holds) ?? null
+}
+
+function stateFor(path: string, isDir: boolean): WindowState {
+  return isDir ? { folder: path, file: null, tabs: [] } : { folder: dirname(path), file: path, tabs: [] }
+}
+
+// この窓でフォルダかファイルを開く
+async function openIn(ws: Workspace, path: string): Promise<void> {
+  const isDir = isDirectory(path)
+  if (isDir === null) return
+  // フォルダが替わるときだけ、先に未保存を片付ける（同じフォルダのファイルなら画面の側で保存する）
+  const next = isDir ? path : ws.folder && path.startsWith(ws.folder + sep) ? ws.folder : dirname(path)
+  if (next !== ws.folder && ws.folder && !(await ws.confirmUnsaved())) return
+  if (isDir) {
+    ws.setFolder(path)
+    ws.send('folder:opened', path, null)
+  } else {
+    if (!ws.folder || !path.startsWith(ws.folder + sep)) ws.setFolder(dirname(path))
+    ws.send('folder:opened', ws.folder, path)
+  }
+}
+
+// ⌘O・ファイルのメニューの「最近使ったもの」・雛形: 今の窓で開く。ただし、ほかの窓でもう開いていたら、その窓を前に出す
+async function openHere(ws: Workspace, path: string): Promise<void> {
+  const isDir = isDirectory(path)
+  if (isDir === null) return
+  const owner = ownerOf(path, isDir, ws)
+  if (owner && owner !== ws) {
+    reveal(owner)
+    if (!isDir) await openIn(owner, path)
+    return
+  }
+  await openIn(ws, path)
+}
+
+// Finder・Dock から: 開いている窓があればそれを前に出す。前の窓が空ならそこで、空でなければ新しい窓で開く
+async function openOutside(path: string): Promise<void> {
+  const isDir = isDirectory(path)
+  if (isDir === null) return
+  const owner = ownerOf(path, isDir, front)
+  if (owner) {
+    reveal(owner)
+    if (!isDir) await openIn(owner, path)
+    return
+  }
+  if (front && !front.folder) {
+    reveal(front)
+    await openIn(front, path)
+    return
+  }
+  openWindow(stateFor(path, isDir), true)
+}
+
+// 起動時に開く窓: 前回の窓を開き直し、テスト用の CALMPAGE_OPEN は 1 つめの窓で、Finder から渡されたものはその規則で開く
+function startupStates(): { state: WindowState | null; fresh: boolean }[] {
+  const list = loadSettings()
+    .windows.filter((w) => isDirectory(w.folder))
+    .map((state) => ({ state: state as WindowState | null, fresh: false }))
+  const open = process.env.CALMPAGE_OPEN
+  const isDir = open ? isDirectory(open) : null
+  if (open && isDir !== null) {
+    const first = list[0]?.state
+    const state = !isDir && first && open.startsWith(first.folder + sep) ? { ...first, file: open } : stateFor(open, isDir)
+    const rest = list.slice(1).filter((w) => w.state?.folder !== state.folder)
+    list.splice(0, list.length, { state, fresh: true }, ...rest)
+  }
+  for (const path of pendingOpens.splice(0)) {
+    const isDir = isDirectory(path)
+    if (isDir === null) continue
+    const owner = list.find(({ state }) => state && (isDir ? state.folder === path : path.startsWith(state.folder + sep)))
+    if (owner?.state && !isDir) owner.state = { ...owner.state, file: path }
+    else if (!owner) list.push({ state: stateFor(path, isDir), fresh: true })
+  }
+  return list.length ? list : [{ state: null, fresh: false }]
+}
+
+// 最近開いたフォルダ。macOS の「最近使った項目」（Dock の右クリックなど）にも載せる。
+// メニューの一覧は自前で持つ: フォルダは書類の種類として登録していないので、標準の「最近使ったもの」の
+// メニュー（role: recentDocuments）には出ないことがあるため。
+const RECENT_MAX = 10
+
+function addRecent(path: string): void {
+  const recent = [path, ...loadSettings().recent.filter((p) => p !== path)].slice(0, RECENT_MAX)
+  saveSettings({ recent })
+  // 自動テストでは、手元の Mac の「最近使った項目」を汚さない
+  if (!testing) app.addRecentDocument(path)
+  buildMenu()
+}
+
+function clearRecent(): void {
+  saveSettings({ recent: [] })
+  if (!testing) app.clearRecentDocuments()
+  buildMenu()
+}
+
+function recentItems(tr: (key: Key) => string): Electron.MenuItemConstructorOptions[] {
+  const recent = loadSettings().recent.filter((p) => existsSync(p))
+  // 同じ名前のフォルダが並ぶときだけ、親のフォルダ名を添えて見分けられるようにする
+  const label = (p: string): string =>
+    recent.filter((q) => basename(q) === basename(p)).length > 1 ? `${basename(p)} — ${basename(dirname(p))}` : basename(p)
+  const items: Electron.MenuItemConstructorOptions[] = recent.map((p) => ({
+    label: label(p),
+    click: (_item, window) => {
+      const ws = target(window)
+      if (ws) void openHere(ws, p)
+      else openWindow(stateFor(p, true), true)
+    }
+  }))
+  if (items.length) items.push({ type: 'separator' })
+  items.push({ label: tr('menu.clearRecent'), enabled: recent.length > 0, click: clearRecent })
+  return items
+}
+
+// ---------- 設定とメニュー ----------
+
+// 設定の変更はここに集める。メニューと設定画面のどちらから変えても、すべての窓へ同じ知らせが届く。
 function updateSettings(patch: Partial<Settings>): void {
   // 消した・書き換えたエージェントは止める（次に開いたとき新しい設定で起動する）
   if (patch.agents) {
     for (const old of loadSettings().agents) {
       const next = patch.agents.find((a) => a.id === old.id)
       if (JSON.stringify(next) === JSON.stringify(old)) continue
-      terminals.stop(old.id)
-      acpAgents.stop(old.id)
+      for (const ws of workspaces) {
+        ws.terminals.stop(old.id)
+        ws.acpAgents.stop(old.id)
+      }
     }
   }
   saveSettings(patch)
-  if (patch.aiEnabled === false) stopAgents()
+  if (patch.aiEnabled === false) for (const ws of workspaces) ws.stopAgents()
   if (patch.theme) nativeTheme.themeSource = patch.theme
-  if (patch.theme || patch.palette) win?.setBackgroundColor(groundColor())
+  if (patch.theme || patch.palette) for (const ws of workspaces) ws.win.setBackgroundColor(groundColor())
   if (patch.theme || patch.palette || patch.language || patch.aiEnabled !== undefined) buildMenu()
-  send('settings:changed', loadSettings())
+  for (const ws of workspaces) ws.send('settings:changed', view(ws))
+}
+
+// 画面からの設定のうち、開いているファイルとタブは窓ごとに持つ。残りを返す
+function takeOpenFiles(ws: Workspace, patch: Partial<Settings>): Partial<Settings> {
+  const { folder: _folder, file, tabs, ...rest } = patch
+  if (file !== undefined || tabs) ws.setOpenFiles({ file, tabs })
+  return rest
 }
 
 function buildMenu(): void {
   const { theme, palette, language, aiEnabled } = loadSettings()
   const tr = (key: Key): string => t(language, key)
-  const command = (name: string) => () => send('menu', name)
+  const command = (name: string) => (_item: Electron.MenuItem, window?: BaseWindow) => target(window)?.send('menu', name)
   const themeItem = (value: Theme): Electron.MenuItemConstructorOptions => ({
     label: tr(`theme.${value}`),
     type: 'radio',
@@ -321,13 +379,14 @@ function buildMenu(): void {
           { label: tr('menu.newFile'), accelerator: 'CmdOrCtrl+N', click: command('new-file') },
           { label: tr('menu.newDocument'), accelerator: 'CmdOrCtrl+Shift+N', click: command('new-document') },
           { label: tr('menu.newFolder'), accelerator: 'CmdOrCtrl+Alt+N', click: command('new-folder') },
+          { label: tr('menu.newWindow'), accelerator: 'Cmd+Ctrl+N', click: () => void openWindow(null) },
           { type: 'separator' },
-          { label: tr('menu.openFolder'), accelerator: 'CmdOrCtrl+O', click: () => void chooseFolder() },
+          { label: tr('menu.openFolder'), accelerator: 'CmdOrCtrl+O', click: (_item, window) => void chooseFolder(target(window)) },
           { label: tr('menu.openRecent'), submenu: recentItems(tr) },
           { type: 'separator' },
           { label: tr('menu.saveCompile'), accelerator: 'CmdOrCtrl+S', click: command('save') },
           { label: tr('menu.compile'), accelerator: 'CmdOrCtrl+R', click: command('build') },
-          { label: tr('menu.cancelCompile'), accelerator: 'CmdOrCtrl+.', click: () => cancelBuild() },
+          { label: tr('menu.cancelCompile'), accelerator: 'CmdOrCtrl+.', click: (_item, window) => target(window)?.cancelBuild() },
           { label: tr('menu.cleanAux'), click: command('clean') },
           { type: 'separator' },
           { label: tr('menu.rename'), click: command('rename') },
@@ -337,7 +396,8 @@ function buildMenu(): void {
           { label: tr('menu.openPdf'), accelerator: 'CmdOrCtrl+Shift+O', click: command('open-pdf') },
           { type: 'separator' },
           { label: tr('menu.history'), click: command('history') },
-          { label: tr('menu.closeTab'), accelerator: 'CmdOrCtrl+W', click: command('close-tab') }
+          { label: tr('menu.closeTab'), accelerator: 'CmdOrCtrl+W', click: command('close-tab') },
+          { role: 'close', label: tr('menu.closeWindow'), accelerator: 'CmdOrCtrl+Shift+W' }
         ]
       },
       {
@@ -393,7 +453,9 @@ function buildMenu(): void {
         ]
       },
       {
+        // role: 'window' で macOS の Window メニューになり、開いている窓（フォルダの名前）が一覧に並ぶ
         label: tr('menu.window'),
+        role: 'window',
         submenu: [
           { role: 'minimize', label: tr('menu.minimize') },
           { role: 'zoom', label: tr('menu.zoom') },
@@ -408,44 +470,43 @@ function buildMenu(): void {
   )
 }
 
-async function chooseFolder(): Promise<void> {
-  if (!win) return
-  const res = await dialog.showOpenDialog(win, { properties: ['openDirectory', 'openFile'], filters: [{ name: 'LaTeX', extensions: ['tex'] }] })
-  if (!res.canceled && res.filePaths[0]) await openPath(res.filePaths[0])
+async function chooseFolder(ws: Workspace | null): Promise<void> {
+  if (!ws) return
+  const res = await dialog.showOpenDialog(ws.win, { properties: ['openDirectory', 'openFile'], filters: [{ name: 'LaTeX', extensions: ['tex'] }] })
+  if (!res.canceled && res.filePaths[0]) await openHere(ws, res.filePaths[0])
 }
 
 // ファイル操作の失敗は、その場で短く知らせる
-async function attempt<T>(job: () => Promise<T>): Promise<T | null> {
+async function attempt<T>(ws: Workspace, job: () => Promise<T>): Promise<T | null> {
   try {
     return await job()
   } catch (err) {
-    if (win) await dialog.showMessageBox(win, { type: 'warning', message: tr('file.failed'), detail: err instanceof Error ? err.message : String(err) })
+    if (!ws.win.isDestroyed()) await dialog.showMessageBox(ws.win, { type: 'warning', message: tr('file.failed'), detail: err instanceof Error ? err.message : String(err) })
     return null
   }
 }
 
-function inFolder(path: string): boolean {
-  return !!folder && (path === folder || path.startsWith(folder + sep))
+function inFolder(ws: Workspace, path: string): boolean {
+  return !!ws.folder && (path === ws.folder || path.startsWith(ws.folder + sep))
 }
 
 // ファイル一覧の右クリック。選んだ操作は画面に返して、画面の側で行う（名前の入力は一覧の中でするため）
-function showFileMenu(target: string | null, isDir: boolean): void {
-  if (!win) return
-  const pick = (command: string) => () => send('file-menu', command, target, isDir)
+function showFileMenu(ws: Workspace, target: string | null, isDir: boolean): void {
+  const pick = (command: string) => () => ws.send('file-menu', command, target, isDir)
   const items: Electron.MenuItemConstructorOptions[] = [
     { label: tr('menu.newFile'), click: pick('new-file') },
     { label: tr('menu.newFolder'), click: pick('new-folder') }
   ]
   if (target) items.push({ type: 'separator' }, { label: tr('menu.rename'), click: pick('rename') }, { label: tr('menu.trash'), click: pick('trash') })
-  items.push({ type: 'separator' }, { label: tr('menu.reveal'), click: () => folder && shell.showItemInFolder(target ?? folder) })
-  Menu.buildFromTemplate(items).popup({ window: win })
+  items.push({ type: 'separator' }, { label: tr('menu.reveal'), click: () => ws.folder && shell.showItemInFolder(target ?? ws.folder) })
+  Menu.buildFromTemplate(items).popup({ window: ws.win })
 }
 
-// 雛形から新しい書類を作る。空のフォルダを選ぶか作ってもらい、雛形を置いて開く
-async function createFromTemplate(id: TemplateId): Promise<boolean> {
-  if (!win || !TEMPLATE_IDS.includes(id)) return false
-  if (!(await confirmUnsaved())) return false
-  const res = await dialog.showOpenDialog(win, {
+// 雛形から新しい書類を作る。空のフォルダを選ぶか作ってもらい、雛形を置いて開く（⌘O と同じく、今の窓で）
+async function createFromTemplate(ws: Workspace, id: TemplateId): Promise<boolean> {
+  if (!TEMPLATE_IDS.includes(id)) return false
+  if (!(await ws.confirmUnsaved())) return false
+  const res = await dialog.showOpenDialog(ws.win, {
     properties: ['openDirectory', 'createDirectory'],
     message: tr('template.chooseFolder'),
     buttonLabel: tr('template.create')
@@ -453,91 +514,90 @@ async function createFromTemplate(id: TemplateId): Promise<boolean> {
   const dir = res.filePaths[0]
   if (res.canceled || !dir) return false
   if (!(await isEmptyFolder(dir))) {
-    await dialog.showMessageBox(win, { type: 'warning', message: tr('template.notEmpty', { name: basename(dir) }), detail: tr('template.notEmptyDetail') })
+    await dialog.showMessageBox(ws.win, { type: 'warning', message: tr('template.notEmpty', { name: basename(dir) }), detail: tr('template.notEmptyDetail') })
     return false
   }
-  const main = await attempt(() => writeTemplate(id, dir))
+  const main = await attempt(ws, () => writeTemplate(id, dir))
   if (!main) return false
-  await openPath(main)
+  await openHere(ws, main)
   return true
 }
 
+// ---------- IPC ----------
+
+// 窓からの呼び出しは、送ってきた窓の状態で答える。閉じかけの窓からなら何もしない
+function handle<A extends unknown[]>(channel: string, fn: (ws: Workspace, ...args: A) => unknown): void {
+  ipcMain.handle(channel, (e, ...args) => {
+    const ws = wsOf(e.sender)
+    return ws ? fn(ws, ...(args as A)) : null
+  })
+}
+
+function listen<A extends unknown[]>(channel: string, fn: (ws: Workspace, ...args: A) => void): void {
+  ipcMain.on(channel, (e, ...args) => {
+    const ws = wsOf(e.sender)
+    if (ws) fn(ws, ...(args as A))
+  })
+}
+
 function registerIpc(): void {
-  ipcMain.on('app:reply', (_e, id: number, value: unknown) => {
-    pending.get(id)?.(value)
-    pending.delete(id)
-  })
-  ipcMain.handle('unsaved:confirm', (_e, paths: string[] | null, save: boolean) => confirmUnsaved(paths, save))
-  ipcMain.on('window:edited', (_e, edited: boolean) => win?.setDocumentEdited(edited))
-  ipcMain.handle('folder:entries', () => (folder ? listProjectEntries(folder) : { files: [], emptyDirs: [] }))
-  ipcMain.handle('file:create', (_e, dir: string, name: string) => (inFolder(dir) ? attempt(() => createFile(dir, name)) : null))
-  ipcMain.handle('folder:create', (_e, dir: string, name: string) => (inFolder(dir) ? attempt(() => createFolder(dir, name)) : null))
-  ipcMain.handle('path:rename', (_e, path: string, name: string) => (inFolder(path) && path !== folder ? attempt(() => renamePath(path, name)) : null))
-  ipcMain.handle('path:trash', async (_e, path: string) => (inFolder(path) && path !== folder ? (await attempt(() => shell.trashItem(path))) !== null : false))
+  ipcMain.on('app:reply', (_e, id: number, value: unknown) => answer(id, value))
+  handle('unsaved:confirm', (ws, paths: string[] | null, save: boolean) => ws.confirmUnsaved(paths, save))
+  listen('window:edited', (ws, edited: boolean) => ws.win.setDocumentEdited(edited))
+  handle('folder:entries', (ws) => (ws.folder ? listProjectEntries(ws.folder) : { files: [], emptyDirs: [] }))
+  handle('file:create', (ws, dir: string, name: string) => (inFolder(ws, dir) ? attempt(ws, () => createFile(dir, name)) : null))
+  handle('folder:create', (ws, dir: string, name: string) => (inFolder(ws, dir) ? attempt(ws, () => createFolder(dir, name)) : null))
+  handle('path:rename', (ws, path: string, name: string) => (inFolder(ws, path) && path !== ws.folder ? attempt(ws, () => renamePath(path, name)) : null))
+  handle('path:trash', async (ws, path: string) => (inFolder(ws, path) && path !== ws.folder ? (await attempt(ws, () => shell.trashItem(path))) !== null : false))
   ipcMain.on('path:reveal', (_e, path: string) => shell.showItemInFolder(path))
-  ipcMain.on('file:quicklook', (_e, path: string) => win?.previewFile(path))
-  ipcMain.on('file:menu', (_e, target: string | null, isDir: boolean) => showFileMenu(target, isDir))
-  ipcMain.handle('file:import', (_e, src: string, dir?: string) => (folder ? attempt(() => importFile(folder as string, src, dir)) : null))
-  ipcMain.handle('file:import-data', (_e, name: string, data: Uint8Array, dir?: string) =>
-    folder ? attempt(() => importData(folder as string, name, data, dir)) : null
+  listen('file:quicklook', (ws, path: string) => ws.win.previewFile(path))
+  listen('file:menu', (ws, target: string | null, isDir: boolean) => showFileMenu(ws, target, isDir))
+  handle('file:import', (ws, src: string, dir?: string) => (ws.folder ? attempt(ws, () => importFile(ws.folder as string, src, dir)) : null))
+  handle('file:import-data', (ws, name: string, data: Uint8Array, dir?: string) =>
+    ws.folder ? attempt(ws, () => importData(ws.folder as string, name, data, dir)) : null
   )
-  ipcMain.handle('template:create', (_e, id: TemplateId) => createFromTemplate(id))
-  ipcMain.handle('app:initial', async () => {
-    const settings = loadSettings()
-    let file = settings.file
-    const open = pendingOpen
-    pendingOpen = null
-    if (open && statSync(open, { throwIfNoEntry: false })?.isDirectory()) {
-      setFolder(open)
-      file = null
-    } else if (open) {
-      if (!folder || !open.startsWith(folder + sep)) setFolder(dirname(open))
-      file = open
-    } else if (folder) {
-      watcher.watch(folder)
-    }
-    return { ...settings, folder, file }
-  })
-  ipcMain.handle('folder:choose', () => chooseFolder())
-  ipcMain.handle('folder:files', () => (folder ? listProjectFiles(folder) : []))
+  handle('template:create', (ws, id: TemplateId) => createFromTemplate(ws, id))
+  // 開き直し（開発中の再読み込みなど）でも呼ばれる。見張りは窓を作ったときに始めている
+  handle('app:initial', (ws) => view(ws))
+  handle('folder:choose', (ws) => chooseFolder(ws))
+  handle('folder:files', (ws) => (ws.folder ? listProjectFiles(ws.folder) : []))
   ipcMain.handle('file:read', (_e, path: string) => readFile(path, 'utf8'))
-  ipcMain.handle('file:write', async (_e, path: string, content: string) => {
-    watcher.noteWrite(path, content)
+  handle('file:write', async (ws, path: string, content: string) => {
+    ws.watcher.noteWrite(path, content)
     await recordVersion(path, content)
     await writeFile(path, content, 'utf8')
   })
   registerSearchAndHistory()
-  ipcMain.on('build:request', (_e, file: string) => void requestBuild(file))
-  ipcMain.on('build:cancel', () => cancelBuild())
-  ipcMain.handle('build:clean', (_e, file: string) => cleanAux(file))
+  listen('build:request', (ws, file: string) => void ws.requestBuild(file))
+  listen('build:cancel', (ws) => ws.cancelBuild())
+  handle('build:clean', (ws, file: string) => ws.cleanAux(file))
   ipcMain.handle('pdf:read', (_e, path: string) => readFile(path))
-  ipcMain.handle('pdf:open-external', () => (currentPdf ? shell.openPath(currentPdf) : null))
-  ipcMain.handle('sync:forward', (_e, file: string, line: number, column: number) =>
-    currentPdf ? forwardSync(currentPdf, file, line, column) : null
-  )
-  ipcMain.handle('sync:backward', (_e, page: number, x: number, y: number) =>
-    currentPdf ? backwardSync(currentPdf, page, x, y) : null
-  )
-  ipcMain.on('settings:save', (_e, patch: Partial<Settings>) => saveSettings(patch))
-  ipcMain.on('settings:update', (_e, patch: Partial<Settings>) => updateSettings(patch))
-  // 端末と ACP は柱のタブごとに動かす。タブの ID は画面が決める。
-  ipcMain.handle('term:start', (_e, tab: string, id: string, cols: number, rows: number) => {
-    const agent = agentConfig(id)
-    return folder && agent ? terminals.start(tab, agent, folder, cols, rows) : null
+  handle('pdf:open-external', (ws) => (ws.currentPdf ? shell.openPath(ws.currentPdf) : null))
+  handle('sync:forward', (ws, file: string, line: number, column: number) => (ws.currentPdf ? forwardSync(ws.currentPdf, file, line, column) : null))
+  handle('sync:backward', (ws, page: number, x: number, y: number) => (ws.currentPdf ? backwardSync(ws.currentPdf, page, x, y) : null))
+  listen('settings:save', (ws, patch: Partial<Settings>) => {
+    const rest = takeOpenFiles(ws, patch)
+    if (Object.keys(rest).length) saveSettings(rest)
   })
-  ipcMain.on('term:input', (_e, tab: string, data: string) => terminals.write(tab, data))
-  ipcMain.on('term:resize', (_e, tab: string, cols: number, rows: number) => terminals.resize(tab, cols, rows))
-  ipcMain.on('term:close', (_e, tab: string) => terminals.close(tab))
-  ipcMain.handle('acp:start', (_e, tab: string, id: string) => {
+  listen('settings:update', (ws, patch: Partial<Settings>) => updateSettings(takeOpenFiles(ws, patch)))
+  // 端末と ACP は窓ごと・柱のタブごとに動かす。タブの ID は画面が決める。
+  handle('term:start', (ws, tab: string, id: string, cols: number, rows: number) => {
     const agent = agentConfig(id)
-    return folder && agent ? acpAgents.start(tab, agent, folder) : { ok: false, error: 'no folder' }
+    return ws.folder && agent ? ws.terminals.start(tab, agent, ws.folder, cols, rows) : null
   })
-  ipcMain.handle('acp:new-session', (_e, tab: string) => acpAgents.newSession(tab))
-  ipcMain.handle('acp:authenticate', (_e, tab: string, methodId: string) => acpAgents.authenticate(tab, methodId))
-  ipcMain.handle('acp:prompt', (_e, tab: string, prompt: unknown[]) => acpAgents.prompt(tab, prompt as never))
-  ipcMain.on('acp:cancel', (_e, tab: string) => acpAgents.cancel(tab))
-  ipcMain.on('acp:close', (_e, tab: string) => acpAgents.close(tab))
-  ipcMain.on('acp:answer', (_e, key: string, optionId: string | null) => acpAgents.answerPermission(key, optionId))
+  listen('term:input', (ws, tab: string, data: string) => ws.terminals.write(tab, data))
+  listen('term:resize', (ws, tab: string, cols: number, rows: number) => ws.terminals.resize(tab, cols, rows))
+  listen('term:close', (ws, tab: string) => ws.terminals.close(tab))
+  handle('acp:start', (ws, tab: string, id: string) => {
+    const agent = agentConfig(id)
+    return ws.folder && agent ? ws.acpAgents.start(tab, agent, ws.folder) : { ok: false, error: 'no folder' }
+  })
+  handle('acp:new-session', (ws, tab: string) => ws.acpAgents.newSession(tab))
+  handle('acp:authenticate', (ws, tab: string, methodId: string) => ws.acpAgents.authenticate(tab, methodId))
+  handle('acp:prompt', (ws, tab: string, prompt: unknown[]) => ws.acpAgents.prompt(tab, prompt as never))
+  listen('acp:cancel', (ws, tab: string) => ws.acpAgents.cancel(tab))
+  listen('acp:close', (ws, tab: string) => ws.acpAgents.close(tab))
+  listen('acp:answer', (ws, key: string, optionId: string | null) => ws.acpAgents.answerPermission(key, optionId))
   ipcMain.handle('registry:list', async () => {
     try {
       return { agents: await loadRegistry() }
@@ -545,9 +605,9 @@ function registerIpc(): void {
       return { error: String(err) }
     }
   })
-  ipcMain.handle('folder:completion-files', () => (folder ? listCompletionFiles(folder) : []))
+  handle('folder:completion-files', (ws) => (ws.folder ? listCompletionFiles(ws.folder) : []))
   // 誤った語の右クリック: 言い換えの候補と「辞書に追加」を出す。選んだものを返し、何も選ばなければ null
-  ipcMain.handle('spell:menu', (_e, word: string, suggestions: string[]) => {
+  handle('spell:menu', (ws, word: string, suggestions: string[]) => {
     const tr = (key: Key): string => t(loadSettings().language, key)
     return new Promise((resolve) => {
       let picked: { replace?: string; learned?: boolean } | null = null
@@ -565,7 +625,7 @@ function registerIpc(): void {
         }
       )
       // メニューを閉じた知らせは、項目のクリックより先に届くことがあるので、一拍おいて返す
-      Menu.buildFromTemplate(items).popup({ window: win ?? undefined, callback: () => setTimeout(() => resolve(picked), 0) })
+      Menu.buildFromTemplate(items).popup({ window: ws.win, callback: () => setTimeout(() => resolve(picked), 0) })
     })
   })
   ipcMain.on('link:open', (_e, url: string) => {
@@ -574,92 +634,42 @@ function registerIpc(): void {
   })
 }
 
-// 画面が「閉じてよい」と答えたら立てる。立っている間は close と before-quit を止めない
-let released = false
-let releasing = false
-
-async function releaseWindow(then: () => void): Promise<void> {
-  if (releasing) return
-  releasing = true
-  try {
-    if (await confirmUnsaved()) {
-      released = true
-      then()
-    }
-  } finally {
-    releasing = false
-  }
-}
-
-// フォルダ内の検索と置換、ファイルの履歴。新しい検索が来たら、古い検索は途中でやめる。
-let searchRun = 0
-
+// フォルダ内の検索と置換、ファイルの履歴。新しい検索が来たら、その窓の古い検索は途中でやめる。
 function registerSearchAndHistory(): void {
-  ipcMain.handle('search:run', async (_e, query: string, opts: SearchOptions, overrides: Record<string, string>) => {
-    const run = ++searchRun
-    if (!folder || !query) return { files: [], total: 0, truncated: false }
+  handle('search:run', async (ws, query: string, opts: SearchOptions, overrides: Record<string, string>) => {
+    const run = ++ws.searchRun
+    if (!ws.folder || !query) return { files: [], total: 0, truncated: false }
     try {
-      return await searchFiles((await listProjectFiles(folder)).filter(isText), overrides, query, opts, () => run !== searchRun)
+      return await searchFiles((await listProjectFiles(ws.folder)).filter(isText), overrides, query, opts, () => run !== ws.searchRun)
     } catch (err) {
       return { error: String(err) }
     }
   })
-  ipcMain.handle('search:replace', async (_e, query: string, opts: SearchOptions, replacement: string, exclude: string[]) => {
-    if (!folder || !query) return { files: 0, count: 0 }
+  handle('search:replace', async (ws, query: string, opts: SearchOptions, replacement: string, exclude: string[]) => {
+    if (!ws.folder || !query) return { files: 0, count: 0 }
     const skip = new Set(exclude)
-    const targets = (await listProjectFiles(folder)).filter((p) => isText(p) && inFolder(p) && !skip.has(p))
+    const targets = (await listProjectFiles(ws.folder)).filter((p) => isText(p) && inFolder(ws, p) && !skip.has(p))
     // 自分の書き込みを外部の変更と取り違えないよう、書く前に見張りへ知らせる
     return replaceInFiles(targets, query, opts, replacement, (path, before, after) => {
-      watcher.noteWrite(path, after)
+      ws.watcher.noteWrite(path, after)
       void recordVersion(path, after, before)
     })
   })
-  ipcMain.handle('dialog:confirm', async (_e, message: string, detail: string, ok: string, cancel: string) => {
-    if (!win) return false
-    const res = await dialog.showMessageBox(win, { type: 'question', message, detail, buttons: [ok, cancel], defaultId: 0, cancelId: 1 })
+  handle('dialog:confirm', async (ws, message: string, detail: string, ok: string, cancel: string) => {
+    const res = await dialog.showMessageBox(ws.win, { type: 'question', message, detail, buttons: [ok, cancel], defaultId: 0, cancelId: 1 })
     return res.response === 0
   })
   ipcMain.handle('history:list', (_e, path: string) => listVersions(path))
   ipcMain.handle('history:read', (_e, path: string, id: string) => readVersion(path, id))
 }
 
-function createWindow(): void {
-  win = new BrowserWindow({
-    width: 1480,
-    height: 920,
-    minWidth: 900,
-    minHeight: 560,
-    title: 'Calmpage',
-    titleBarStyle: 'hiddenInset',
-    trafficLightPosition: { x: 14, y: 13 },
-    backgroundColor: groundColor(),
-    // 自動テスト中は最前面に出さない（手元で打っているキー入力をエディターが奪わないように）
-    show: !process.env.CALMPAGE_USER_DATA,
-    webPreferences: {
-      preload: join(__dirname, '../preload/index.js'),
-      sandbox: true,
-      contextIsolation: true,
-      backgroundThrottling: false
-    }
-  })
-  released = false
-  win.on('close', (e) => {
-    if (released) return
-    e.preventDefault()
-    void releaseWindow(() => win?.close())
-  })
-  win.on('closed', () => (win = null))
-  // ファイルを窓に落としたとき、その場所へ移ってしまわないように
-  win.webContents.on('will-navigate', (e) => e.preventDefault())
-  if (process.env.CALMPAGE_USER_DATA) win.showInactive()
-  if (process.env.ELECTRON_RENDERER_URL) void win.loadURL(process.env.ELECTRON_RENDERER_URL)
-  else void win.loadFile(join(__dirname, '../renderer/index.html'))
-}
+// ---------- アプリ ----------
 
 app.on('open-file', (event, path) => {
   event.preventDefault()
-  if (win && app.isReady()) void openPath(path)
-  else pendingOpen = path
+  if (app.isReady() && workspaces.length) void openOutside(path)
+  else if (app.isReady()) openWindow(stateFor(path, !!isDirectory(path)), true)
+  else pendingOpens.push(path)
 })
 
 app.whenReady().then(() => {
@@ -669,22 +679,34 @@ app.whenReady().then(() => {
   registerIpc()
   warmUpShellEnv()
   buildMenu()
-  createWindow()
+  for (const { state, fresh } of startupStates()) openWindow(state, fresh)
+  // 起動した窓の並びを書いておく（消えたフォルダを一覧から外し、CALMPAGE_OPEN などで開いたものを足す）
+  persistWindows()
   app.on('activate', () => {
-    if (!win) createWindow()
+    if (!workspaces.length) for (const { state } of startupStates()) openWindow(state)
   })
 })
 
-// ⌘Q: 窓の close より先に来るので、ここで一度止めて画面に聞く
+// ⌘Q: 窓の close より先に来るので、ここで一度止めて、窓を 1 つずつ確かめる。どれかでキャンセルされたら終わらない
+let askingQuit = false
+
 app.on('before-quit', (e) => {
-  if (released || !win) return
+  if (quitting || !workspaces.length) return
   e.preventDefault()
-  void releaseWindow(() => app.quit())
+  if (askingQuit) return
+  askingQuit = true
+  void (async () => {
+    try {
+      for (const ws of [...workspaces]) {
+        if (!ws.win.isDestroyed() && !(await ws.confirmUnsaved(null, false, () => reveal(ws)))) return
+      }
+      persistWindows()
+      quitting = true
+      app.quit()
+    } finally {
+      askingQuit = false
+    }
+  })()
 })
 
-app.on('window-all-closed', () => {
-  watcher.close()
-  cancelBuild() // latexmk は detached で動くので、窓と一緒には止まらない
-  stopAgents()
-  app.quit()
-})
+app.on('window-all-closed', () => app.quit())

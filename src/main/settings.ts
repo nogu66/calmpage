@@ -12,7 +12,17 @@ export type PdfView = 'width' | 'page' | 'spread'
 // 「自動」は書類の中身から選ぶ。書類の「% !TEX program」と .latexmkrc はこれより先に効く
 export type EngineSetting = 'auto' | 'pdflatex' | 'xelatex' | 'lualatex' | 'uplatex'
 
+// 窓 1 つ分。終了したときに開いていた窓を、次の起動で開き直すために覚えておく
+export interface WindowState {
+  folder: string
+  file: string | null
+  tabs: string[]
+  bounds?: { x: number; y: number; width: number; height: number }
+}
+
 export interface Settings {
+  // folder / file / tabs は窓ごとの値。main が窓ごとに埋めて画面へ渡す。
+  // ファイルには 1 つめの窓の値も書いておく（windows を知らない前の版に戻しても、そのフォルダが開くように）
   folder: string | null
   file: string | null
   zoom: number
@@ -36,6 +46,7 @@ export interface Settings {
   recent: string[]
   // エディターのタブに並べていたファイル（並びのとおり）。開いていたものは file に入る
   tabs: string[]
+  windows: WindowState[]
   engine: EngineSetting
   // 書類から任意のプログラムを動かせるようになるので、既定は切っておく
   shellEscape: boolean
@@ -44,7 +55,7 @@ export interface Settings {
   outline: boolean
 }
 
-const DEFAULTS: Settings = { folder: null, file: null, zoom: 1, auto: true, split: 0.5, sidebar: true, preview: true, theme: 'system', palette: 'paper', language: 'en', aiEnabled: true, ai: false, agents: DEFAULT_AGENTS, agent: 'claude', aiWidth: 440, pdfView: 'width', pdfInvert: false, recent: [], tabs: [], engine: 'auto', shellEscape: false, spellcheck: true, outline: true }
+const DEFAULTS: Settings = { folder: null, file: null, zoom: 1, auto: true, split: 0.5, sidebar: true, preview: true, theme: 'system', palette: 'paper', language: 'en', aiEnabled: true, ai: false, agents: DEFAULT_AGENTS, agent: 'claude', aiWidth: 440, pdfView: 'width', pdfInvert: false, recent: [], tabs: [], windows: [], engine: 'auto', shellEscape: false, spellcheck: true, outline: true }
 
 function path(): string {
   return join(app.getPath('userData'), 'settings.json')
@@ -60,7 +71,11 @@ function stored(): Partial<Settings> {
 }
 
 export function loadSettings(): Settings {
-  return { ...DEFAULTS, ...stored() }
+  const saved = stored()
+  const settings = { ...DEFAULTS, ...saved }
+  // 0.3.0 までは窓が 1 つで、folder / file / tabs だけを持っていた。windows を書くまでは、それを 1 つめの窓として読む
+  if (!saved.windows && saved.folder) settings.windows = [{ folder: saved.folder, file: saved.file ?? null, tabs: saved.tabs ?? [] }]
+  return settings
 }
 
 export function saveSettings(patch: Partial<Settings>): void {
