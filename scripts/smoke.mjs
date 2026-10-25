@@ -1439,18 +1439,30 @@ await page.screenshot({ path: join(shots, '11-tabs.png') })
   // 折りたたみ: \begin{abstract} を畳む
   await page.locator('.cm-content').click()
   await page.keyboard.press('Meta+ArrowUp')
-  const marker = await page.evaluate(() => {
-    const line = [...document.querySelectorAll('.cm-line')].find((l) => l.textContent.includes('\\begin{abstract}'))
-    const top = line?.getBoundingClientRect().top ?? -1
-    const el = [...document.querySelectorAll('.cm-foldGutter .cm-gutterElement')].find((g) => Math.abs(g.getBoundingClientRect().top - top) < 4 && g.querySelector('span[title]'))
-    const r = el?.querySelector('span').getBoundingClientRect()
-    return r ? { x: r.x + r.width / 2, y: r.y + r.height / 2 } : null
-  })
+  // 下の方から先頭へ飛ぶと、CodeMirror が描き直すまで位置がずれる。印の位置が 2 回続けて同じになるまで待つ
+  let marker = null
+  for (let tries = 0, last = ''; tries < 20; tries++) {
+    await page.waitForTimeout(100)
+    marker = await page.evaluate(() => {
+      const line = [...document.querySelectorAll('.cm-line')].find((l) => l.textContent.includes('\\begin{abstract}'))
+      const top = line?.getBoundingClientRect().top ?? -1
+      const el = [...document.querySelectorAll('.cm-foldGutter .cm-gutterElement')].find((g) => Math.abs(g.getBoundingClientRect().top - top) < 4 && g.querySelector('span[title]'))
+      const r = el?.querySelector('span').getBoundingClientRect()
+      if (!r) return null
+      const x = r.x + r.width / 2
+      const y = r.y + r.height / 2
+      return { x, y, hit: document.elementFromPoint(x, y)?.closest('.cm-foldGutter') ? 'fold' : document.elementFromPoint(x, y)?.outerHTML.slice(0, 80) }
+    })
+    const key = JSON.stringify(marker)
+    if (marker && key === last) break
+    last = key
+  }
   if (marker) await page.mouse.click(marker.x, marker.y)
+  await page.waitForTimeout(200)
   const folded = await page.locator('.cm-foldPlaceholder').count()
   const hiddenText = !(await page.evaluate(() => document.querySelector('.cm-content').innerText.includes('A drop of sumi ink')))
   if (folded) await page.locator('.cm-foldPlaceholder').first().click()
-  check('環境の折りたたみ', !!marker && folded === 1 && hiddenText, JSON.stringify({ marker: !!marker, folded, hiddenText }))
+  check('環境の折りたたみ', !!marker && folded === 1 && hiddenText, JSON.stringify({ marker, folded, hiddenText }))
 
   // アウトライン: \input をたどった見出し。押すとそのファイルのその行へ
   const headings = await page.locator('#outline-list li').allTextContents()
