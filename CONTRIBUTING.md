@@ -75,7 +75,8 @@ Calmpage is an [Electron](https://www.electronjs.org) app built with [electron-v
 | `src/shared/i18n.ts` | All UI text in English and Japanese |
 | `src/renderer/main.ts` | The window: wiring, status, problems, settings, AI panel |
 | `src/renderer/editor.ts` | The CodeMirror 6 editor |
-| `src/renderer/preview.ts` | The pdf.js viewer; renders visible pages before swapping, so recompiles don't flicker |
+| `src/renderer/preview.ts` | The pdf.js viewer; renders visible pages (with their text and link layers) before swapping, so recompiles don't flicker. Also finds text in the PDF |
+| `src/renderer/pdf-bar.ts` | The bar above the PDF (page, zoom, view) and the find box |
 | `src/renderer/thread.ts` | The ACP thread view (replies, tool calls, diffs, permissions, plans) |
 | `src/renderer/terminal.ts` | The terminal view (xterm.js), themed to match the palette |
 | `src/renderer/style.css` | All styles; colors are CSS variables per palette and appearance |
