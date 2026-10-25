@@ -27,6 +27,26 @@ export async function listProjectFiles(folder: string): Promise<string[]> {
   return found.sort((a, b) => a.localeCompare(b))
 }
 
+// エディターの補完に使うファイル（\includegraphics の画像、\input の .tex、\cite の .bib など）
+const COMPLETION = /\.(tex|bib|sty|cls|png|jpe?g|pdf|eps|svg)$/i
+
+export async function listCompletionFiles(folder: string): Promise<string[]> {
+  const found: string[] = []
+  async function walk(dir: string, depth: number): Promise<void> {
+    if (depth > 8 || found.length >= MAX_FILES) return
+    const entries = await readdir(dir, { withFileTypes: true }).catch(() => [])
+    for (const entry of entries) {
+      if (entry.isDirectory()) {
+        if (!entry.name.startsWith('.') && !SKIP_DIRS.has(entry.name)) await walk(join(dir, entry.name), depth + 1)
+      } else if (COMPLETION.test(entry.name)) {
+        found.push(join(dir, entry.name))
+      }
+    }
+  }
+  await walk(folder, 0)
+  return found.sort((a, b) => a.localeCompare(b))
+}
+
 // 外部（ほかのエディターや AI エージェント）による変更を知らせる。自分で書いた内容と同じなら知らせない。
 export class FolderWatcher {
   private watcher: FSWatcher | null = null

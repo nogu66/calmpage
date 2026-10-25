@@ -1,10 +1,10 @@
-import { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, shell } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, session, shell } from 'electron'
 import { copyFileSync, existsSync, mkdirSync, statSync } from 'node:fs'
 import { readFile, writeFile } from 'node:fs/promises'
 import { dirname, join, sep } from 'node:path'
 import { AcpAgents } from './acp'
 import { backwardSync, build, forwardSync, resolveRoot, type BuildResult } from './build'
-import { FolderWatcher, listProjectFiles } from './files'
+import { FolderWatcher, listCompletionFiles, listProjectFiles } from './files'
 import { loadRegistry } from './registry'
 import { warmUpShellEnv } from './shell-env'
 import { Terminals } from './terminals'
@@ -187,11 +187,33 @@ function buildMenu(): void {
       },
       {
         label: tr('menu.edit'),
+        // 取り消しは role: 'undo' にしない（CodeMirror の履歴とずれる）。窓に送って、エディターか入力欄で行う。
+        // キーはまず窓に届き、CodeMirror が扱ったときはメニューは動かないので、二重には効かない
         submenu: [
+          { label: tr('menu.undo'), accelerator: 'CmdOrCtrl+Z', click: command('undo') },
+          { label: tr('menu.redo'), accelerator: 'Shift+CmdOrCtrl+Z', click: command('redo') },
+          { type: 'separator' },
           { role: 'cut', label: tr('menu.cut') },
           { role: 'copy', label: tr('menu.copy') },
           { role: 'paste', label: tr('menu.paste') },
-          { role: 'selectAll', label: tr('menu.selectAll') }
+          { role: 'selectAll', label: tr('menu.selectAll') },
+          { type: 'separator' },
+          { label: tr('menu.find'), accelerator: 'CmdOrCtrl+F', click: command('find') },
+          { label: tr('menu.replace'), accelerator: 'Alt+CmdOrCtrl+F', click: command('replace') },
+          { label: tr('menu.findNext'), accelerator: 'CmdOrCtrl+G', click: command('find-next') },
+          { label: tr('menu.findPrevious'), accelerator: 'Shift+CmdOrCtrl+G', click: command('find-previous') },
+          { label: tr('menu.goToLine'), accelerator: 'Alt+CmdOrCtrl+G', click: command('go-to-line') },
+          { type: 'separator' },
+          { label: tr('menu.toggleComment'), accelerator: 'CmdOrCtrl+/', click: command('toggle-comment') },
+          {
+            label: tr('menu.format'),
+            submenu: [
+              { label: tr('menu.bold'), accelerator: 'Shift+CmdOrCtrl+B', click: command('bold') },
+              { label: tr('menu.italic'), accelerator: 'CmdOrCtrl+I', click: command('italic') },
+              { label: tr('menu.emph'), accelerator: 'Shift+CmdOrCtrl+I', click: command('emph') },
+              { label: tr('menu.typewriter'), click: command('typewriter') }
+            ]
+          }
         ]
       },
       {
@@ -288,6 +310,29 @@ function registerIpc(): void {
     } catch (err) {
       return { error: String(err) }
     }
+  })
+  ipcMain.handle('folder:completion-files', () => (folder ? listCompletionFiles(folder) : []))
+  // 誤った語の右クリック: 言い換えの候補と「辞書に追加」を出す。選んだものを返し、何も選ばなければ null
+  ipcMain.handle('spell:menu', (_e, word: string, suggestions: string[]) => {
+    const tr = (key: Key): string => t(loadSettings().language, key)
+    return new Promise((resolve) => {
+      let picked: { replace?: string; learned?: boolean } | null = null
+      const items: Electron.MenuItemConstructorOptions[] = suggestions.length
+        ? suggestions.slice(0, 8).map((s) => ({ label: s, click: () => (picked = { replace: s }) }))
+        : [{ label: tr('spell.noGuesses'), enabled: false }]
+      items.push(
+        { type: 'separator' },
+        {
+          label: tr('spell.learn'),
+          click: () => {
+            session.defaultSession.addWordToSpellCheckerDictionary(word)
+            picked = { learned: true }
+          }
+        }
+      )
+      // メニューを閉じた知らせは、項目のクリックより先に届くことがあるので、一拍おいて返す
+      Menu.buildFromTemplate(items).popup({ window: win ?? undefined, callback: () => setTimeout(() => resolve(picked), 0) })
+    })
   })
   ipcMain.on('link:open', (_e, url: string) => {
     if (/^https?:\/\//.test(url)) void shell.openExternal(url)

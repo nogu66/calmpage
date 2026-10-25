@@ -26,9 +26,12 @@ export interface Settings {
   agents: AgentConfig[]
   agent: string
   aiWidth: number
+  // エディター: 本文の英単語のスペルチェックと、サイドバーのアウトラインを開いておくか
+  spellcheck: boolean
+  outline: boolean
 }
 
-const DEFAULTS: Settings = { folder: null, file: null, zoom: 1, auto: true, split: 0.5, sidebar: true, preview: true, theme: 'system', palette: 'paper', language: 'en', aiEnabled: true, ai: false, agents: DEFAULT_AGENTS, agent: 'claude', aiWidth: 440 }
+const DEFAULTS: Settings = { folder: null, file: null, zoom: 1, auto: true, split: 0.5, sidebar: true, preview: true, theme: 'system', palette: 'paper', language: 'en', aiEnabled: true, ai: false, agents: DEFAULT_AGENTS, agent: 'claude', aiWidth: 440, spellcheck: true, outline: true }
 
 function path(): string {
   return join(app.getPath('userData'), 'settings.json')

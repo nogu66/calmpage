@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron'
+import { contextBridge, ipcRenderer, webFrame, type IpcRendererEvent } from 'electron'
 import type { BuildResult, SyncBox } from '../main/build'
 import type { ContentBlock, RequestPermissionRequest, SessionUpdate } from '@agentclientprotocol/sdk'
 import type { StartResult } from '../main/acp'
@@ -38,6 +38,13 @@ const api = {
   acpAnswer: (key: string, optionId: string | null): void => ipcRenderer.send('acp:answer', key, optionId),
   openLink: (url: string): void => ipcRenderer.send('link:open', url),
   listRegistry: (): Promise<{ agents?: RegistryAgent[]; error?: string }> => ipcRenderer.invoke('registry:list'),
+  // エディターの補完用: 画像も含むプロジェクトのファイル
+  listCompletionFiles: (): Promise<string[]> => ipcRenderer.invoke('folder:completion-files'),
+  // スペルチェック: 調べるのは窓の中（macOS のスペルチェッカー）、辞書への追加とメニューは main
+  spellMisspelled: (word: string): boolean => webFrame.isWordMisspelled(word),
+  spellSuggestions: (word: string): string[] => webFrame.getWordSuggestions(word),
+  spellMenu: (word: string, suggestions: string[]): Promise<{ replace?: string; learned?: boolean } | null> =>
+    ipcRenderer.invoke('spell:menu', word, suggestions),
 
   onFolderOpened: (cb: (folder: string, file: string | null) => void) => on('folder:opened', cb),
   onFileChanged: (cb: (path: string, content: string) => void) => on('file:changed', cb),

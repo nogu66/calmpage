@@ -5,6 +5,7 @@ import { DEFAULT_AGENTS, LOGIN_SHELL, type RegistryAgent } from '../shared/agent
 import type { SumiApi } from '../preload'
 import { t, type Key } from '../shared/i18n'
 import { Editor } from './editor'
+import { runEditCommand, Writing } from './latex'
 import { Preview } from './preview'
 import { TerminalPane } from './terminal'
 import { ThreadPane } from './thread'
@@ -35,7 +36,16 @@ let pdfNote: { key: Key; params: Record<string, string | number> } | null = null
 
 const tr = (key: Key, params?: Record<string, string | number>): string => t(settings?.language ?? 'en', key, params)
 
-const editor = new Editor($('editor'), onEdit, () => updateChips())
+const writing = new Writing({
+  api: sumi,
+  tr,
+  path: () => editor.path,
+  root: () => lastRoot,
+  live: (path) => editor.textOf(path),
+  open: (path, line) => void openFile(path, line),
+  saveOutlineOpen: (open) => sumi.saveSettings({ outline: open })
+})
+const editor = new Editor($('editor'), onEdit, () => updateChips(), writing.extension())
 const preview = new Preview($('pdf-scroll'), (page, x, y) => void backwardSync(page, x, y))
 const terminals = new TerminalPane($('ai-terms'), sumi, () => ({ exited: tr('ai.exited') }))
 const threads = new ThreadPane($('ai-threads'), {
@@ -187,6 +197,7 @@ async function onBuildFinished(result: BuildResult | null, file: string, error?:
     return
   }
   lastRoot = result.root
+  writing.schedule()
   diagnostics = result.diagnostics
   $('engine').textContent = result.engine
   markActiveFile()
@@ -683,6 +694,7 @@ function togglePreview(): void {
 // ---------- メニューと外部の変更 ----------
 
 function handleMenu(command: string): void {
+  if (runEditCommand(editor.view, command)) return
   switch (command) {
     case 'save':
       return void save()
@@ -730,6 +742,7 @@ async function onFolderOpened(next: string, file: string | null): Promise<void> 
   renderProblems(false)
   setStatus('idle', 'status.idle')
   $('engine').textContent = ''
+  writing.setFolder(next)
   await refreshFiles()
   updateTitle()
   const first = file ?? files.find((f) => f.endsWith('.tex'))
@@ -739,6 +752,7 @@ async function onFolderOpened(next: string, file: string | null): Promise<void> 
 
 // ほかのエディターや AI が書き換えたら、開いている内容を読み直して組み直す。
 async function onFileChanged(path: string, content: string): Promise<void> {
+  writing.fileChanged(path, content)
   if (!files.includes(path)) await refreshFiles()
   editor.reloadFromDisk(path, content)
   if (path === editor.path) showEditorDiagnostics()
@@ -770,6 +784,8 @@ function applySettings(next: Settings): void {
   $<HTMLInputElement>('auto').checked = next.auto
   $<HTMLInputElement>('settings-auto').checked = next.auto
   $<HTMLInputElement>('settings-ai').checked = next.aiEnabled
+  $<HTMLInputElement>('settings-spellcheck').checked = next.spellcheck
+  writing.applySettings(next)
   document.body.classList.toggle('ai-off', !next.aiEnabled)
   for (const group of document.querySelectorAll<HTMLElement>('[data-setting]')) {
     const value = next[group.dataset.setting as 'language' | 'theme' | 'palette']
@@ -827,6 +843,7 @@ function setupSettings(): void {
     }
   }
   $<HTMLInputElement>('settings-ai').addEventListener('change', (e) => sumi.updateSettings({ aiEnabled: (e.target as HTMLInputElement).checked }))
+  $<HTMLInputElement>('settings-spellcheck').addEventListener('change', (e) => sumi.updateSettings({ spellcheck: (e.target as HTMLInputElement).checked }))
   for (const id of ['auto', 'settings-auto']) {
     $<HTMLInputElement>(id).addEventListener('change', (e) => sumi.updateSettings({ auto: (e.target as HTMLInputElement).checked }))
   }
