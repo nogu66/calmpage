@@ -81,9 +81,11 @@ export interface PickerHost {
 
 type Mode = 'pillar' | 'settings'
 
-// 並びは「使えるもの（追加済み・すぐ使える）→ 入れられるもの → 使えないもの」、その中は名前順。
-// 押してすぐ始められるものを上に置き、この Mac で使えないものは下へよける。
-// 一覧を出している間は並びを変えない（足したり入れたりした行が動くと、目で追えなくなる）。
+// 「すぐ使える」（追加済み・npx や PATH で動く）と「インストールが要る」（取ってきて入れる・この Mac では使えない）の
+// タブに分ける。後ろのタブでは、入れられるものを先に、使えないものを下へよける。その中は名前順。
+// 一覧を出している間は並びもタブも変えない（足したり入れたりした行が動くと、目で追えなくなる）。
+type Tab = 'ready' | 'install'
+
 function rank(entry: RegistryAgent, added: boolean): number {
   if (added || entry.status.kind === 'ready') return 0
   return entry.status.kind === 'install' ? 1 : 2
@@ -95,7 +97,11 @@ export class AgentPicker {
   private status = el('p', 'picker-status')
   private retry = el('button', 'link-button picker-retry')
   private list = el('ul', 'picker-list')
+  private tabs = el('div', 'segmented picker-tabs')
+  private tabButtons: Record<Tab, HTMLButtonElement> = { ready: el('button', 'picker-tab'), install: el('button', 'picker-tab') }
+  private tab: Tab = 'ready'
   private order: string[] = []
+  private group = new Map<string, Tab>()
   private shown: RegistryAgent[] = []
   private active = 0
 
@@ -114,7 +120,20 @@ export class AgentPicker {
     this.input.setAttribute('aria-controls', this.list.id)
     const statusRow = el('div', 'picker-status-row')
     statusRow.append(this.status, this.retry)
-    this.el.append(this.input, statusRow, this.list)
+    for (const t of ['ready', 'install'] as Tab[]) {
+      const b = this.tabButtons[t]
+      b.type = 'button'
+      b.dataset.tab = t
+      b.addEventListener('click', () => {
+        this.tab = t
+        this.active = 0
+        this.render()
+        this.list.scrollTop = 0
+        this.input.focus()
+      })
+      this.tabs.append(b)
+    }
+    this.el.append(this.tabs, this.input, statusRow, this.list)
     if (host.custom) {
       const custom = el('button', 'link-button picker-custom')
       custom.dataset.i18n = 'settings.customOpen'
@@ -149,6 +168,7 @@ export class AgentPicker {
   reset(): void {
     this.input.value = ''
     this.active = 0
+    this.tab = 'ready'
     this.order = []
     this.render()
     this.list.scrollTop = 0
@@ -163,6 +183,7 @@ export class AgentPicker {
     const ranked = agents.map((a) => ({ a, r: rank(a, !!findAdded(a, mine)) }))
     ranked.sort((x, y) => x.r - y.r || x.a.name.localeCompare(y.a.name))
     this.order = ranked.map((x) => x.a.id)
+    this.group = new Map(ranked.map((x) => [x.a.id, x.r === 0 ? 'ready' : 'install']))
   }
 
   render(): void {
@@ -186,7 +207,16 @@ export class AgentPicker {
         return words.every((w) => text.includes(w))
       })
     const byName = (a: RegistryAgent): boolean => words.every((w) => `${a.name} ${a.id}`.toLowerCase().includes(w))
-    this.shown = [...hits.filter(byName), ...hits.filter((a) => !byName(a))]
+    const inTab = (t: Tab): RegistryAgent[] => hits.filter((a) => this.group.get(a.id) === t)
+    const other: Tab = this.tab === 'ready' ? 'install' : 'ready'
+    // いまのタブに当たりが無く、もう一方にあれば、そちらへ移る（探したものが見えないままにしない）
+    if (!inTab(this.tab).length && inTab(other).length) this.tab = other
+    for (const t of ['ready', 'install'] as Tab[]) {
+      this.tabButtons[t].textContent = this.host.tr(t === 'ready' ? 'picker.tabReady' : 'picker.tabInstall', { n: inTab(t).length })
+      this.tabButtons[t].setAttribute('aria-pressed', String(t === this.tab))
+    }
+    const current = inTab(this.tab)
+    this.shown = [...current.filter(byName), ...current.filter((a) => !byName(a))]
     this.active = Math.min(this.active, Math.max(0, this.shown.length - 1))
     this.status.textContent = this.shown.length ? '' : this.host.tr('picker.none')
     this.status.title = ''

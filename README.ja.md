@@ -165,7 +165,7 @@ AI パネルは使わなくてもかまいません。⇧⌘L かタイトルバ
 
 <!-- ここに画面写真を置く: AI パネルで差分と「許可 / やめる」が出ているところ -->
 
-- **[ACP](https://agentclientprotocol.com) のエージェントなら何でも。** Agent Client Protocol に対応したエージェントは、Zed と同じように Calmpage の会話画面で動きます。Claude Code と Codex は最初から入っていて、手元の `claude` / `codex` のログイン（または `ANTHROPIC_API_KEY` / `OPENAI_API_KEY`）をそのまま使います。ほかは柱の **+ → エージェントを追加…** で、[ACP の登録簿](https://agentclientprotocol.com/get-started/registry)から検索して ⏎ を押せば、足して新しいタブで開きます。専用のプログラムで配られるもの（goose や Kimi CLI など）は、Calmpage が取ってきて入れます。`npx` や `uvx` で動くものはそのまま足します。同じ一覧は **設定 → エージェント** にもあり、コマンドを自分で指定して足すこともできます。
+- **[ACP](https://agentclientprotocol.com) のエージェントなら何でも。** Agent Client Protocol に対応したエージェントは、Zed と同じように Calmpage の会話画面で動きます。Claude Code と Codex は最初から入っていて、手元の `claude` / `codex` のログイン（または `ANTHROPIC_API_KEY` / `OPENAI_API_KEY`）をそのまま使います。ほかは柱の **+ → エージェントを追加…** で、[ACP の登録簿](https://agentclientprotocol.com/get-started/registry)から検索して ⏎ を押せば、足して新しいタブで開きます。一覧は「すぐ使える」（追加済みのものと、`npx` や Mac に入っているプログラムで動くもの）と「インストールが要る」のタブに分かれています。専用のプログラムで配られるもの（goose や Kimi CLI など）は、Calmpage が取ってきて入れます。`npx` や `uvx` で動くものはそのまま足します。同じ一覧は **設定 → エージェント** にもあり、コマンドを自分で指定して足すこともできます。
 - **送るたびに文脈を添える。** 上のチップで、今のファイルと選択行、コンパイルのエラー、見ている PDF のページを添えます。押すと外せます。
 - **書き換えには必ず許可が要る。** エージェントがファイルを変える前に、差分と *許可* / *やめる* を出します。変わったファイルは読み直して、コンパイルし直します。
 - **本物の端末も。** *Terminal* を選ぶと、開いているフォルダでいつものログインシェルが開きます。そこで `claude` を起動すれば、Claude Code のコマンドがすべて使えます。ACP に対応していないエージェントも、端末のエージェントとして足せます。

@@ -1763,6 +1763,7 @@ await page.screenshot({ path: join(shots, '11-tabs.png') })
     icon: !!r.querySelector('.picker-icon').style.getPropertyValue('--icon'),
     letter: r.querySelector('.picker-icon.letter')?.textContent ?? ''
   })))
+  const tabLabels = (root) => page.evaluate((r) => [...document.querySelectorAll(`${r} .picker-tab`)].map((b) => `${b.textContent}${b.getAttribute('aria-pressed') === 'true' ? '*' : ''}`), root)
   const openPicker = async () => {
     await page.locator('#new-tab').click()
     await page.locator('#agent-menu .agent-add').click()
@@ -1776,39 +1777,53 @@ await page.screenshot({ path: join(shots, '11-tabs.png') })
   const offlineText = await page.locator('#agent-picker .picker-status').textContent()
   await app.evaluate(() => (globalThis.__fetchOffline = false))
   await page.locator('#agent-picker .picker-retry').click()
-  const loaded = await waitFor(() => document.querySelectorAll('#agent-picker .picker-row').length === 5, null, 10_000)
+  // すぐ使える 2 件（追加済みの Claude と PATH にあるもの）と、インストールが要る 3 件にタブで分かれる
+  const loaded = await waitFor(() => document.querySelectorAll('#agent-picker .picker-row').length === 2, null, 10_000)
   check('ACP の選択: 読めないときは知らせて、もう一度読める', offline && /オフライン/.test(offlineText) && loaded, offlineText)
 
   // 2. 「+」の「エージェントを追加…」で一覧が出る。並びは使える → 入れられる → 使えない、アイコンは data: URL か頭文字
   await waitFor(() => !!document.querySelector('#agent-picker .picker-row[data-id="claude-acp"] .picker-icon:not(.letter)'), null, 10_000)
-  const rows = await pickerRows()
+  const readyRows = await pickerRows()
+  const tabsAtFirst = await tabLabels('#agent-picker')
+  await page.locator('#agent-picker .picker-tab[data-tab="install"]').click()
+  const installRows = await pickerRows()
+  const rows = [...readyRows, ...installRows]
   const byId = Object.fromEntries(rows.map((r) => [r.id, r]))
   check(
-    'ACP の選択: 「+」から一覧が出る',
-    rows.map((r) => r.id).join(',') === 'claude-acp,smoke-ready,smoke-badsum,smoke-install,smoke-linux' &&
+    'ACP の選択: 「+」から一覧が出る（すぐ使える / インストールが要る のタブ）',
+    tabsAtFirst.join() === 'すぐ使える（2）*,インストールが要る（3）' &&
+      readyRows.map((r) => r.id).join(',') === 'claude-acp,smoke-ready' &&
+      installRows.map((r) => r.id).join(',') === 'smoke-badsum,smoke-install,smoke-linux' &&
       byId['smoke-ready'].action === '追加' && byId['smoke-install'].action === '入れる' && byId['smoke-linux'].state === 'unavailable' && /この Mac/.test(byId['smoke-linux'].action) &&
       byId['claude-acp'].icon && byId['smoke-install'].letter === 'S',
-    rows.map((r) => `${r.id}:${r.state}:${r.action}${r.icon ? ':icon' : ''}`).join(' ')
+    `${tabsAtFirst.join(' | ')} / ` + rows.map((r) => `${r.id}:${r.state}:${r.action}${r.icon ? ':icon' : ''}`).join(' ')
   )
+  await page.locator('#agent-picker .picker-tab[data-tab="ready"]').click()
 
   // 3. 既定の Claude Code（id は claude）は、登録簿の claude-acp と同じパッケージなので追加済み
   check('ACP の選択: 既定の Claude Code が追加済みと出る', byId['claude-acp'].state === 'added' && byId['claude-acp'].action === '開く', JSON.stringify(byId['claude-acp']))
 
-  // 4. 検索で絞り、↑↓ で選ぶ。Esc で閉じる
+  // 4. 検索で絞り、タブの件数も絞られる。いまのタブに当たりが無ければ、当たりのあるタブへ移る。↑↓ で選び、Esc で閉じる
+  await page.locator('#agent-picker .picker-search').focus()
   await page.keyboard.type('smoke')
   const narrowed = (await pickerRows()).map((r) => r.id)
+  const narrowedTabs = await tabLabels('#agent-picker')
+  await page.locator('#agent-picker .picker-tab[data-tab="install"]').click()
   const firstActive = await page.locator('#agent-picker .picker-search').getAttribute('aria-activedescendant')
   await page.keyboard.press('ArrowDown')
   const secondActive = await page.locator('#agent-picker .picker-search').getAttribute('aria-activedescendant')
-  await page.keyboard.press('ArrowUp')
+  await page.locator('#agent-picker .picker-tab[data-tab="ready"]').click()
   await page.keyboard.type(' bad')
   const single = (await pickerRows()).map((r) => r.id)
+  const movedTabs = await tabLabels('#agent-picker')
   await page.keyboard.press('Escape')
   const closed = await page.locator('#agent-picker').isHidden()
   check(
-    'ACP の選択: 検索で絞れて、↑↓ と Esc で操作できる',
-    narrowed.length === 4 && !narrowed.includes('claude-acp') && firstActive === 'picker-pillar-smoke-ready' && secondActive === 'picker-pillar-smoke-badsum' && single.join() === 'smoke-badsum' && closed,
-    `${narrowed.join(',')} / ${firstActive} → ${secondActive} / ${single.join(',')}`
+    'ACP の選択: 検索で絞れて、当たりのあるタブへ移り、↑↓ と Esc で操作できる',
+    narrowed.join() === 'smoke-ready' && narrowedTabs.join() === 'すぐ使える（1）*,インストールが要る（3）' &&
+      firstActive === 'picker-pillar-smoke-badsum' && secondActive === 'picker-pillar-smoke-install' &&
+      single.join() === 'smoke-badsum' && movedTabs.join() === 'すぐ使える（0）,インストールが要る（1）*' && closed,
+    `${narrowed.join(',')} ${narrowedTabs.join(' | ')} / ${firstActive} → ${secondActive} / ${single.join(',')} ${movedTabs.join(' | ')}`
   )
 
   // 5. ⏎ で足して、そのまま新しいタブで開く（設定画面を通らない）
@@ -1856,7 +1871,8 @@ await page.screenshot({ path: join(shots, '11-tabs.png') })
   // 8. 設定: 一覧は最初から出ていて、手で書く欄は畳んである。外したエージェントは、入れたファイルごと片付く
   for (const name of ['Smoke Install', 'Smoke Ready']) await page.locator('#ai-tabs .ai-tab', { hasText: name }).locator('.ai-tab-close').click()
   await page.locator('#open-settings').click()
-  const settingsShown = await waitFor(() => document.querySelectorAll('#settings-picker .picker-row').length === 5, null, 10_000)
+  // 設定の一覧もタブで分かれる。この時点で Smoke Ready と Smoke Install は足してあるので、すぐ使える側に入る
+  const settingsShown = await waitFor(() => document.querySelectorAll('#settings-picker .picker-row').length === 3, null, 10_000)
   const settingsClaude = await page.locator('#settings-picker .picker-row[data-id="claude-acp"] .picker-action').textContent()
   const customHidden = await page.locator('#agent-custom').isHidden()
   await page.locator('#agent-list .agent-row', { hasText: 'Smoke Install' }).locator('.agent-remove').click()

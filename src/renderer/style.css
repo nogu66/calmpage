@@ -1216,6 +1216,17 @@ button.agent-row-main:hover,
   padding: 6px;
 }
 
+/* すぐ使えるもの / インストールが要るもの。検索欄の上に、幅いっぱいで置く */
+.picker-tabs {
+  flex: none;
+  display: flex;
+  margin-bottom: 6px;
+}
+
+.picker-tabs button {
+  flex: 1;
+}
+
 .picker-search {
   flex: none;
   width: 100%;
