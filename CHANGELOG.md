@@ -4,6 +4,12 @@ All notable changes to Calmpage are listed here. The format follows [Keep a Chan
 
 ## Unreleased
 
+### Added
+
+- Find and replace across the folder in the sidebar (⇧⌘F, or Edit → Find in Folder), with match case, whole word, and regular expressions. Results are grouped by file; Replace All asks first, changes open files in the editor, and writes the others to disk.
+- Editor tabs for the files you open. A dot marks unsaved changes and an underline marks the root document. Close a tab with ×, ⌘W, or a middle click (unsaved changes are saved first), and move between tabs with ⌃Tab / ⌃⇧Tab or ⇧⌘[ / ⇧⌘]. The tabs come back the next time you open the folder.
+- Local file history: every save keeps a version of the file in `~/Library/Application Support/Calmpage/history/` (up to 50 per file, for 30 days, without duplicates). File → File History… lists the versions, shows a diff against the current text, and restores one.
+
 ## 0.3.0 - 2026-10-23
 
 ### Changed
