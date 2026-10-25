@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer, webUtils, type IpcRendererEvent } from 'electron'
+import { contextBridge, ipcRenderer, webFrame, webUtils, type IpcRendererEvent } from 'electron'
 import type { BuildResult, SyncBox } from '../main/build'
 import type { ProjectEntries } from '../main/files'
 import type { TemplateId } from '../main/templates'
@@ -83,6 +83,13 @@ const api = {
     on('app:flush', async (id: number, mode: FlushMode, paths: string[] | null) => ipcRenderer.send('app:reply', id, await cb(mode, paths))),
   onFileMenu: (cb: (command: string, target: string | null, isDir: boolean) => void) => on('file-menu', cb),
   onFilesChanged: (cb: () => void) => on('files:changed', cb),
+  // エディターの補完用: 画像も含むプロジェクトのファイル
+  listCompletionFiles: (): Promise<string[]> => ipcRenderer.invoke('folder:completion-files'),
+  // スペルチェック: 調べるのは窓の中（macOS のスペルチェッカー）、辞書への追加とメニューは main
+  spellMisspelled: (word: string): boolean => webFrame.isWordMisspelled(word),
+  spellSuggestions: (word: string): string[] => webFrame.getWordSuggestions(word),
+  spellMenu: (word: string, suggestions: string[]): Promise<{ replace?: string; learned?: boolean } | null> =>
+    ipcRenderer.invoke('spell:menu', word, suggestions),
 
   onFolderOpened: (cb: (folder: string, file: string | null) => void) => on('folder:opened', cb),
   onFileChanged: (cb: (path: string, content: string, source: boolean) => void) => on('file:changed', cb),

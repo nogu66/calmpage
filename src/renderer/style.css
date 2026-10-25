@@ -2640,3 +2640,106 @@ body.search-open #search {
   margin: 8px 0;
   color: var(--muted);
 }
+
+/* ---------- エディター: 数式の色・アウトライン・文字数 ---------- */
+
+/* 数式は本文から少しだけ離した色。紙は墨の濃淡のまま、苔と砂は差し色に寄せる */
+:root {
+  --syntax-math: color-mix(in srgb, var(--text) 76%, var(--card));
+}
+
+:root[data-palette='moss'],
+:root[data-palette='sand'] {
+  --syntax-math: color-mix(in srgb, var(--accent) 70%, var(--text));
+}
+
+/* ファイル一覧の下に、開け閉めできる見出しの一覧 */
+#outline {
+  margin-top: 18px;
+}
+
+.outline-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  border: none;
+  background: transparent;
+  padding: 4px 10px;
+  font-size: 11px;
+  color: var(--muted);
+  text-align: left;
+}
+
+.outline-head::before {
+  content: '';
+  border-left: 4px solid currentColor;
+  border-top: 3.5px solid transparent;
+  border-bottom: 3.5px solid transparent;
+  transform: rotate(90deg);
+  transition: transform 0.12s;
+}
+
+#outline.collapsed .outline-head::before {
+  transform: none;
+}
+
+#outline.collapsed #outline-list,
+#outline.collapsed #outline-empty {
+  display: none;
+}
+
+#outline-list {
+  list-style: none;
+  margin: 2px 0 0;
+  padding: 0;
+}
+
+.outline-item {
+  padding: 3px 10px 3px calc(10px + var(--level, 0) * 12px);
+  border-radius: 7px;
+  margin: 1px 0;
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: default;
+}
+
+.outline-item:hover {
+  background: var(--hover);
+}
+
+.outline-item.active {
+  color: var(--text);
+}
+
+#outline-empty {
+  margin: 2px 0 0;
+  padding: 3px 10px;
+  font-size: 12px;
+  color: var(--faint);
+}
+
+/* エディターのいちばん下に、単語数と文字数を小さく */
+#editor-foot {
+  flex: none;
+  display: flex;
+  justify-content: flex-end;
+  padding: 0 14px 4px;
+  background: var(--card);
+}
+
+#word-count {
+  border: none;
+  background: transparent;
+  padding: 2px 4px;
+  font-size: 11px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+#word-count:hover {
+  color: var(--text);
+}

@@ -78,7 +78,7 @@ export class PdfBar {
     $<HTMLInputElement>('settings-pdf-invert').checked = settings.pdfInvert
   }
 
-  // ⌥⌘F、またはプレビューで ⌘F。もう開いていれば、入力欄を選び直す
+  // ⌥⇧⌘F、またはプレビューで ⌘F。もう開いていれば、入力欄を選び直す
   openFind(): void {
     if (!this.preview.loaded) return
     this.deps.show()

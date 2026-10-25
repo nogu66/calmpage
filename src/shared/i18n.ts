@@ -255,7 +255,33 @@ const en = {
   'settings.engineHint': 'Used when the document has no “% !TEX program” line and the folder has no .latexmkrc.',
   'engine.auto': 'Auto',
   'settings.shellEscape': 'Allow shell escape',
-  'settings.shellEscapeHint': 'Lets a document run any program on your Mac. Some packages need it. Turn it on only for documents you trust.'
+  'settings.shellEscapeHint': 'Lets a document run any program on your Mac. Some packages need it. Turn it on only for documents you trust.',
+  // エディター: 編集メニュー・アウトライン・文字数・スペルチェック
+  'menu.undo': 'Undo',
+  'menu.redo': 'Redo',
+  'menu.find': 'Find…',
+  'menu.replace': 'Find and Replace…',
+  'menu.findNext': 'Find Next',
+  'menu.findPrevious': 'Find Previous',
+  'menu.goToLine': 'Go to Line…',
+  'menu.toggleComment': 'Comment or Uncomment Lines',
+  'menu.format': 'Format',
+  'menu.bold': 'Bold',
+  'menu.italic': 'Italic',
+  'menu.emph': 'Emphasis',
+  'menu.typewriter': 'Typewriter',
+  'outline.title': 'Outline',
+  'outline.empty': 'No headings',
+  'count.file': (p: Params) => `${p.words} words · ${p.chars} characters`,
+  'count.document': (p: Params) => `Document: ${p.words} words · ${p.chars} characters`,
+  'count.selection': (p: Params) => `Selection: ${p.words} words · ${p.chars} characters`,
+  'count.showDocument': 'Commands and comments are not counted. Click to count the whole document.',
+  'count.showFile': 'Commands and comments are not counted. Click to count this file only.',
+  'spell.learn': 'Learn Spelling',
+  'spell.noGuesses': 'No Guesses Found',
+  'settings.editor': 'Editor',
+  'settings.spellcheck': 'Spell check',
+  'settings.spellcheckHint': 'Underlines misspelled English words in the text with the macOS spell checker. Right-click a word for suggestions.'
 } satisfies Record<string, Entry>
 
 export type Key = keyof typeof en
@@ -507,7 +533,33 @@ const ja: Record<Key, Entry> = {
   'settings.engineHint': '書類に「% !TEX program」の行がなく、フォルダに .latexmkrc もないときに使います。',
   'engine.auto': '自動',
   'settings.shellEscape': 'shell-escape を許す',
-  'settings.shellEscapeHint': '書類から Mac の任意のプログラムを動かせるようになります。必要なパッケージもありますが、信頼できる書類のときだけ入れてください。'
+  'settings.shellEscapeHint': '書類から Mac の任意のプログラムを動かせるようになります。必要なパッケージもありますが、信頼できる書類のときだけ入れてください。',
+  // エディター: 編集メニュー・アウトライン・文字数・スペルチェック
+  'menu.undo': '取り消す',
+  'menu.redo': 'やり直す',
+  'menu.find': '検索…',
+  'menu.replace': '置換…',
+  'menu.findNext': '次を検索',
+  'menu.findPrevious': '前を検索',
+  'menu.goToLine': '行へ移動…',
+  'menu.toggleComment': 'コメントの付け外し',
+  'menu.format': '書式',
+  'menu.bold': '太字',
+  'menu.italic': '斜体',
+  'menu.emph': '強調',
+  'menu.typewriter': '等幅',
+  'outline.title': 'アウトライン',
+  'outline.empty': '見出しはありません',
+  'count.file': '{words} 語 · {chars} 文字',
+  'count.document': '書類全体: {words} 語 · {chars} 文字',
+  'count.selection': '選択: {words} 語 · {chars} 文字',
+  'count.showDocument': '命令とコメントは数えません。押すと書類全体を数えます。',
+  'count.showFile': '命令とコメントは数えません。押すとこのファイルだけを数えます。',
+  'spell.learn': '辞書に追加',
+  'spell.noGuesses': '候補がありません',
+  'settings.editor': 'エディター',
+  'settings.spellcheck': 'スペルチェック',
+  'settings.spellcheckHint': '本文の英単語の綴りを macOS のスペルチェッカーで調べ、誤りに下線を引きます。右クリックで候補が出ます。'
 }
 
 const DICTS: Record<Lang, Record<Key, Entry>> = { en, ja }

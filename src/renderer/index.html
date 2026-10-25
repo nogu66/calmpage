@@ -52,6 +52,11 @@
     <main id="workspace">
       <nav id="sidebar">
         <ul id="file-list"></ul>
+        <section id="outline">
+          <button id="outline-toggle" class="outline-head" aria-expanded="true" aria-controls="outline-list"><span data-i18n="outline.title"></span></button>
+          <ul id="outline-list"></ul>
+          <p id="outline-empty" data-i18n="outline.empty" hidden></p>
+        </section>
         <section id="search"></section>
       </nav>
 
@@ -73,6 +78,7 @@
           <ul id="problem-list"></ul>
           <pre id="log-view" hidden></pre>
         </section>
+        <footer id="editor-foot"><button id="word-count"></button></footer>
       </section>
 
       <div id="divider" data-i18n-title="divider.hint"></div>
@@ -225,6 +231,15 @@
               <button type="submit" id="agent-form-submit" class="sheet-done"></button>
             </div>
           </form>
+        </div>
+
+        <h3 data-i18n="settings.editor"></h3>
+        <div class="setting-row">
+          <div>
+            <label for="settings-spellcheck" data-i18n="settings.spellcheck"></label>
+            <p class="setting-hint" data-i18n="settings.spellcheckHint"></p>
+          </div>
+          <input type="checkbox" id="settings-spellcheck" class="switch" />
         </div>
 
         <h3 data-i18n="settings.appearance"></h3>

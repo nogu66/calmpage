@@ -8,7 +8,7 @@ All notable changes to Calmpage are listed here. The format follows [Keep a Chan
 
 - Links in the PDF work: contents, `\ref`, `\cite`, and hyperref links scroll to their target, and URLs open in your browser. ⌘-click still jumps to the source.
 - Select and copy text in the PDF.
-- Find in the PDF with ⌥⌘F, or ⌘F while the PDF has focus. Matches are marked, and ⏎ / ⇧⏎ move between them.
+- Find in the PDF with ⌥⇧⌘F, or ⌘F while the PDF has focus. Matches are marked, and ⏎ / ⇧⏎ move between them.
 - A quiet bar above the PDF shows the page (for example 3 / 12) and the zoom. Type a page number to go there, or turn pages with ← / →.
 - Fit width, whole page, or two pages side by side, from the bar or **Settings → PDF**. The choice is remembered.
 - **Settings → PDF → Dark pages in dark mode** inverts the PDF while the app is dark (off by default).
@@ -28,6 +28,12 @@ All notable changes to Calmpage are listed here. The format follows [Keep a Chan
 - An *Allow shell escape* setting (off by default) passes `-shell-escape` to `latexmk`.
 - A *Log* view next to the Problems list shows the `.log` and the `latexmk` output from the end, with search.
 - BibTeX and Biber warnings and errors appear in the Problems list, linked to the line in the `.bib` file.
+- Completion for commands (with snippets), environments with the matching `\end`, `\ref` labels and `\cite` keys from the whole project, file and image paths, and commands defined with `\newcommand`.
+- An outline in the sidebar that follows `\input` and `\include`. Click a heading to jump to it.
+- Quiet math highlighting, folding for environments and sections, and indentation inside environments. Enter after `\begin{…}` closes the environment.
+- Spell check for English prose with the macOS spell checker, with suggestions on right-click or ⌃Space. It can be turned off in Settings.
+- Word and character counts below the editor, for the file, the selection, or the whole document.
+- Bold (⇧⌘B), italic (⌘I), and emphasis (⇧⌘I), and Undo, Redo, Find, Replace, Find Next, Go to Line, and Comment in the Edit menu.
 
 ### Fixed
 

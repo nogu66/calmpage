@@ -39,9 +39,12 @@ export interface Settings {
   engine: EngineSetting
   // 書類から任意のプログラムを動かせるようになるので、既定は切っておく
   shellEscape: boolean
+  // エディター: 本文の英単語のスペルチェックと、サイドバーのアウトラインを開いておくか
+  spellcheck: boolean
+  outline: boolean
 }
 
-const DEFAULTS: Settings = { folder: null, file: null, zoom: 1, auto: true, split: 0.5, sidebar: true, preview: true, theme: 'system', palette: 'paper', language: 'en', aiEnabled: true, ai: false, agents: DEFAULT_AGENTS, agent: 'claude', aiWidth: 440, pdfView: 'width', pdfInvert: false, recent: [], tabs: [], engine: 'auto', shellEscape: false }
+const DEFAULTS: Settings = { folder: null, file: null, zoom: 1, auto: true, split: 0.5, sidebar: true, preview: true, theme: 'system', palette: 'paper', language: 'en', aiEnabled: true, ai: false, agents: DEFAULT_AGENTS, agent: 'claude', aiWidth: 440, pdfView: 'width', pdfInvert: false, recent: [], tabs: [], engine: 'auto', shellEscape: false, spellcheck: true, outline: true }
 
 function path(): string {
   return join(app.getPath('userData'), 'settings.json')

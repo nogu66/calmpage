@@ -47,6 +47,11 @@ Calmpage is a LaTeX editor that stays out of your way. The name says what it aim
 - Errors in the editor and in a Problems list, including BibTeX and Biber messages linked to the `.bib` line
 - The raw log (the `.log` and the `latexmk` output) next to the Problems list, shown from the end and searchable
 - Stop a long compile with ⌘., and remove auxiliary files from the File menu
+- Completion for commands, environments (with the matching `\end`), `\ref` labels and `\cite` keys from the whole project, file and image paths, and commands you define with `\newcommand`
+- An outline of the whole document in the sidebar, following `\input` and `\include`
+- Quiet highlighting of math, folding for environments and sections, and indentation inside environments
+- Spell check for English prose with the macOS spell checker (commands, math, labels, and comments are skipped)
+- Word and character counts for the file, the selection, or the whole document
 - SyncTeX both ways: ⌘J shows the cursor in the PDF, ⌘-click in the PDF jumps to the source
 - A PDF viewer that works like one: clickable links (contents, `\ref`, `\cite`, URLs), text you can select and copy, search inside the PDF, page numbers, and fit width / whole page / two pages side by side
 - Optional dark pages: invert the PDF in dark mode (off by default)
@@ -126,11 +131,17 @@ Open a folder (or a single `.tex` file) with ⌘O. Calmpage finds the root docum
 | Show or hide the PDF preview | ⇧⌘P, or the button at the right of the title bar |
 | AI panel | ⇧⌘L, or the button at the right of the title bar |
 | Zoom the PDF in / out / fit to width | ⌘= / ⌘- / ⌘0 |
-| Find in the PDF | ⌥⌘F, or ⌘F while the PDF has focus (⏎ next, ⇧⏎ previous) |
+| Find in the PDF | ⌥⇧⌘F, or ⌘F while the PDF has focus (⏎ next, ⇧⏎ previous) |
 | Previous / next page | ← / → while the PDF has focus, or type a number in the bar above the PDF |
 | Follow a link in the PDF | Click it (⌘-click still jumps to the source) |
 | Settings | ⌘, or the gear at the bottom left |
 | Open the PDF in Preview | ⇧⌘O |
+| Bold / italic / emphasis | ⇧⌘B / ⌘I / ⇧⌘I |
+| Comment or uncomment lines | ⌘/ |
+| Show completions | ⌃Space (also suggests spellings for a misspelled word) |
+| Find / find and replace | ⌘F / ⌥⌘F |
+| Find next / previous | ⌘G / ⇧⌘G |
+| Go to line | ⌥⌘G |
 
 ### How Calmpage compiles
 

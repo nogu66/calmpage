@@ -87,6 +87,7 @@ Calmpage is an [Electron](https://www.electronjs.org) app built with [electron-v
 | `src/renderer/search.ts` | Find and replace in the folder (sidebar) |
 | `src/renderer/history.ts` | The File History sheet |
 | `src/renderer/diff.ts` | Line diffs for the File History sheet |
+| `src/renderer/latex/` | Writing aids: the LaTeX tokenizer (math, folding, indentation), completion, outline, spell check, word count, and formatting |
 | `src/renderer/thread.ts` | The ACP thread view (replies, tool calls, diffs, permissions, plans) |
 | `src/renderer/terminal.ts` | The terminal view (xterm.js), themed to match the palette |
 | `src/renderer/style.css` | All styles; colors are CSS variables per palette and appearance |

@@ -1,20 +1,11 @@
 import { basicSetup } from 'codemirror'
 import { indentWithTab } from '@codemirror/commands'
-import { HighlightStyle, StreamLanguage, syntaxHighlighting } from '@codemirror/language'
-import { stex } from '@codemirror/legacy-modes/mode/stex'
 import { lintGutter, setDiagnostics, type Diagnostic as CmDiagnostic } from '@codemirror/lint'
 import { EditorState, Transaction, type Extension } from '@codemirror/state'
 import { EditorView, keymap } from '@codemirror/view'
-import { tags as t } from '@lezer/highlight'
 import { imageDrop } from './drop'
 
-// 色分けは控えめに: 命令は差し色（紙では太字の墨）、コメントは灰色、括弧は薄く、それ以外は本文の色。
-const latexHighlight = HighlightStyle.define([
-  { tag: t.tagName, color: 'var(--syntax-command)', fontWeight: 'var(--syntax-weight)' },
-  { tag: t.comment, color: 'var(--muted)' },
-  { tag: t.bracket, color: 'var(--faint)' },
-  { tag: t.invalid, color: 'var(--syntax-command)', textDecoration: 'underline wavy' }
-])
+// 色分け・補完・スペルチェックなど LaTeX の支えは latex/ にあり、Writing.extension() で受け取る。
 
 const theme = EditorView.theme({
   '&': { height: '100%', backgroundColor: 'var(--card)', color: 'var(--text)' },
@@ -58,7 +49,8 @@ export class Editor {
   constructor(
     parent: HTMLElement,
     private onEdit: () => void,
-    private onSelect: () => void = () => {}
+    private onSelect: () => void = () => {},
+    private support: Extension[] = []
   ) {
     this.view = new EditorView({ parent, state: this.createState('') })
   }
@@ -67,8 +59,7 @@ export class Editor {
     return [
       basicSetup,
       keymap.of([indentWithTab]),
-      StreamLanguage.define(stex),
-      syntaxHighlighting(latexHighlight),
+      this.support,
       EditorView.lineWrapping,
       lintGutter(),
       imageDrop,
@@ -108,6 +99,12 @@ export class Editor {
     return this.view.state.doc.toString()
   }
 
+  // 開いたことのあるファイルの、保存前を含む今の内容。開いていなければ null
+  textOf(path: string): string | null {
+    if (path === this.path) return this.text()
+    return this.docs.get(path)?.state.doc.toString() ?? null
+  }
+
   isDirty(path = this.path): boolean {
     if (!path) return false
     const doc = this.docs.get(path)
@@ -143,11 +140,6 @@ export class Editor {
 
   dirtyPaths(): string[] {
     return [...this.docs.keys()].filter((path) => this.isDirty(path))
-  }
-
-  textOf(path: string): string | null {
-    if (path === this.path) return this.text()
-    return this.docs.get(path)?.state.doc.toString() ?? null
   }
 
   // 「保存しない」を選んだとき: 保存してある内容に戻す

@@ -533,7 +533,7 @@ await clickMenu('PDF 内を検索')
 await page.waitForTimeout(200)
 const menuFind = (await page.locator('#pdf-find').isVisible()) && (await page.evaluate(() => document.activeElement?.id)) === 'pdf-find-input'
 await page.keyboard.press('Escape')
-check('PDF: メニューから検索を開く（⌥⌘F）', menuFind)
+check('PDF: メニューから検索を開く（⌥⇧⌘F）', menuFind)
 
 // ページ: 12 ページの書類で、番号を入れて移り、← → でめくる。見えないページには層を作らない
 const longDoc = join(folder, 'smoke-long.tex')
@@ -1248,6 +1248,225 @@ await page.screenshot({ path: join(shots, '11-tabs.png') })
   for (const p of made) rmSync(p, { force: true })
   await fileItem(filePath).click()
   await built()
+}
+
+// ---------- 班 1: エディター ----------
+// 本体の \end{document} のあとに書く（組版には響かない）。この時点で画面は日本語
+{
+  writeFileSync(join(folder, 'smoke-refs.bib'), '@article{knuth1984,\n  title = {Literate {Programming}},\n  author = {Knuth, Donald E.},\n  year = {1984}\n}\n')
+  writeFileSync(join(folder, 'smoke-figure.png'), '')
+  const lines = () => page.evaluate(() => [...document.querySelectorAll('.cm-line')].map((l) => l.textContent))
+  const tail = async (n) => (await lines()).slice(-n)
+  const options = async () => {
+    await page.waitForSelector('.cm-tooltip-autocomplete li', { timeout: 3000 }).catch(() => {})
+    return page.locator('.cm-tooltip-autocomplete li').allTextContents()
+  }
+  // 候補は非同期に出るので、選びたいものが選ばれるまで待ってから Enter（出た直後の 75ms は Enter を受け付けない）
+  const accept = async (prefix) => {
+    await page
+      .waitForFunction((p) => document.querySelector('.cm-tooltip-autocomplete li[aria-selected]')?.textContent.startsWith(p), prefix, { timeout: 3000 })
+      .catch(() => {})
+    await page.waitForTimeout(150)
+    await page.keyboard.press('Enter')
+  }
+  const newLine = async () => {
+    await page.keyboard.press('Escape')
+    await page.keyboard.press('Meta+ArrowDown')
+    await page.keyboard.press('Enter')
+  }
+  await page.locator(`#file-list li[data-path="${filePath}"]`).click()
+  await page.locator('.cm-content').click()
+  await page.keyboard.press('Meta+ArrowDown')
+
+  // 命令の補完: 数式の中では \frac が先に出て、引数は Tab で移れる
+  await page.keyboard.type('$\\fra')
+  const commandOptions = await options()
+  await accept('\\frac')
+  await page.keyboard.type('a')
+  await page.keyboard.press('Tab')
+  await page.keyboard.type('b')
+  await page.keyboard.press('End')
+  await page.keyboard.type('$')
+  const fracLine = (await tail(1))[0]
+  check('補完: 命令とスニペット', commandOptions[0] === '\\frac' && fracLine === '$\\frac{a}{b}$', `${commandOptions.slice(0, 3).join(', ')} → ${fracLine}`)
+  await page.waitForTimeout(200)
+  const mathSpans = await page.locator('.cm-line', { hasText: '\\frac{a}{b}' }).locator('.cm-latex-math').count()
+  check('数式の色分け', mathSpans > 0, `${mathSpans} 個`)
+
+  // 環境: \begin{ のあとで名前を選ぶと \end まで入る。打ち終えて Enter でも閉じ、中は字下げされる
+  await newLine()
+  await page.keyboard.type('\\begin{ite')
+  const envOptions = await options()
+  await accept('itemize')
+  await page.keyboard.type('first')
+  const itemize = await tail(3)
+  await newLine()
+  await page.keyboard.type('\\begin{center}')
+  await page.keyboard.press('Escape')
+  await page.keyboard.press('Enter')
+  await page.keyboard.type('inside')
+  const center = await tail(3)
+  check(
+    '補完: 環境と \\end の自動挿入',
+    envOptions[0] === 'itemize' && itemize.join('|') === '\\begin{itemize}|  \\item first|\\end{itemize}' && center.join('|') === '\\begin{center}|  inside|\\end{center}',
+    `${itemize.join(' / ')} ; ${center.join(' / ')}`
+  )
+
+  // \ref: 開いていないファイルのラベルも出る。\cite: .bib の鍵を、2 つめの鍵でも
+  await newLine()
+  await page.keyboard.type('\\eqref{')
+  const refOptions = await options()
+  await page.keyboard.type('eq:wash')
+  await accept('eq:washburn')
+  await page.keyboard.press('End')
+  await page.keyboard.type(' \\citep{other,')
+  const citeOptions = await options()
+  await page.keyboard.type('knu')
+  await accept('knuth1984')
+  const refLine = (await tail(1))[0]
+  check(
+    '補完: \\ref のラベルと \\cite の文献',
+    refOptions.some((o) => o.startsWith('eq:washburn') && o.includes('model.tex:28')) && citeOptions.some((o) => o.startsWith('knuth1984') && o.includes('Knuth 1984')) && refLine === '\\eqref{eq:washburn} \\citep{other,knuth1984}',
+    `${refOptions.length} 個 / ${citeOptions.join(', ')} / ${refLine}`
+  )
+
+  // パス: 画像とファイル
+  await newLine()
+  await page.keyboard.type('\\includegraphics{')
+  const imageOptions = await options()
+  await page.keyboard.press('Escape')
+  await page.keyboard.press('End')
+  await page.keyboard.type(' \\input{')
+  const inputOptions = await options()
+  check('補完: 画像とファイルのパス', imageOptions.includes('smoke-figure.png') && inputOptions.includes('sections/model') && !inputOptions.some((o) => o.endsWith('.tex')), `${imageOptions.join(', ')} / ${inputOptions.join(', ')}`)
+
+  // 文書の中で定義した命令
+  await newLine()
+  await page.keyboard.type('\\newcommand{\\smokecmd}[1]{#1}')
+  await newLine()
+  await page.keyboard.type('\\smokec')
+  const defOptions = await options()
+  check('補完: \\newcommand で定義した命令', defOptions.some((o) => o.startsWith('\\smokecmd')), defOptions.join(', '))
+
+  // スペルチェック: 本文の誤りだけに下線。ラベル・数式・コメントは調べない
+  await newLine()
+  await page.keyboard.type('This has a recieve error \\label{fig:definately} $definately$ % definately\n')
+  await page.waitForTimeout(400)
+  const spellLine = page.locator('.cm-line', { hasText: 'This has a recieve' })
+  const marked = await spellLine.locator('.cm-misspelled').allTextContents()
+  check('スペルチェック: 本文だけを調べる', marked.join(',') === 'recieve', marked.join(', '))
+  await page.keyboard.type('recieve')
+  await page.keyboard.press('Control+Space')
+  const spellOptions = await options()
+  await page.keyboard.press('Escape')
+  // 右クリックのメニュー: macOS のメニューは操作できないので、最初の候補を選んだことにする
+  await app.evaluate(({ Menu }) => {
+    Menu.prototype.__popup = Menu.prototype.popup
+    Menu.prototype.popup = function (opts) {
+      this.items[0].click()
+      opts?.callback?.()
+    }
+  })
+  await spellLine.locator('.cm-misspelled').first().click({ button: 'right' })
+  await page.waitForTimeout(300)
+  await app.evaluate(({ Menu }) => (Menu.prototype.popup = Menu.prototype.__popup))
+  const fixed = await page.locator('.cm-line', { hasText: 'This has a' }).first().textContent()
+  check('スペルチェック: 候補（補完と右クリック）', spellOptions.includes('receive') && fixed.startsWith('This has a receive error'), `${spellOptions.join(', ')} / ${fixed}`)
+
+  // 太字（メニュー）と斜体（⌘I）。選択があれば囲み、なければ {} の中へ
+  await newLine()
+  await page.keyboard.type('make bold')
+  await page.keyboard.press('Alt+Shift+ArrowLeft')
+  await clickMenu('太字')
+  await page.keyboard.press('End')
+  await page.keyboard.press('Meta+i')
+  await page.keyboard.type('x')
+  await page.keyboard.press('Meta+Shift+b')
+  await page.keyboard.type('y')
+  const formatLine = (await tail(1))[0]
+  check('太字・斜体', formatLine === 'make \\textbf{bold}\\textit{x\\textbf{y}}', formatLine)
+
+  // ⌘/ でコメントの付け外し。編集メニューの取り消す・やり直す
+  await page.keyboard.press('Meta+/')
+  const commented = (await tail(1))[0]
+  await clickMenu('取り消す')
+  await page.waitForTimeout(100)
+  const undone = (await tail(1))[0]
+  await clickMenu('やり直す')
+  await page.waitForTimeout(100)
+  const redone = (await tail(1))[0]
+  check('コメントの付け外しと取り消し', commented.startsWith('% make') && undone.startsWith('make') && redone.startsWith('% make'), `${commented} → ${undone} → ${redone}`)
+
+  // 編集メニュー: 検索・置換・行へ移動は CodeMirror の画面を開く
+  await clickMenu('検索…')
+  const searchOpen = await page.locator('.cm-search').isVisible()
+  await page.keyboard.press('Escape')
+  await clickMenu('置換…')
+  const replaceFocused = await page.evaluate(() => document.activeElement?.getAttribute('name'))
+  await page.keyboard.press('Escape')
+  await clickMenu('行へ移動…')
+  const gotoOpen = await page.locator('.cm-goto-line').isVisible()
+  await page.keyboard.press('Escape')
+  check('編集メニュー: 検索・置換・行へ移動', searchOpen && replaceFocused === 'replace' && gotoOpen, JSON.stringify({ searchOpen, replaceFocused, gotoOpen }))
+
+  // 文字数: 選択中は選択範囲（命令は数えない）、押すと書類全体
+  await page.locator('.cm-content').click()
+  await page.keyboard.press('Meta+ArrowDown')
+  await page.keyboard.press('Meta+/')
+  await page.keyboard.press('End')
+  const fileCount = await page.locator('#word-count').textContent()
+  await page.keyboard.press('Shift+Home')
+  await page.waitForTimeout(100)
+  const selectionCount = await page.locator('#word-count').textContent()
+  await page.keyboard.press('End')
+  await page.waitForTimeout(100)
+  await page.locator('#word-count').click()
+  const documentCount = await page.locator('#word-count').textContent()
+  await page.locator('#word-count').click()
+  check('文字数', /^[\d,]+ 語 · [\d,]+ 文字$/.test(fileCount) && /^選択: 4 語 · 10 文字$/.test(selectionCount) && /^書類全体: [\d,]+ 語/.test(documentCount), `${fileCount} / ${selectionCount} / ${documentCount}`)
+
+  // スペルチェックを切ると下線が消える
+  await page.locator('#open-settings').click()
+  await page.locator('#settings-spellcheck').click()
+  await page.waitForTimeout(200)
+  const offCount = await page.locator('.cm-misspelled').count()
+  await page.locator('#settings-spellcheck').click()
+  await page.waitForTimeout(200)
+  const onCount = await page.locator('.cm-misspelled').count()
+  await page.keyboard.press('Escape')
+  check('スペルチェックの設定', offCount === 0 && onCount > 0, `切 ${offCount} / 入 ${onCount}`)
+
+  // 折りたたみ: \begin{abstract} を畳む
+  await page.locator('.cm-content').click()
+  await page.keyboard.press('Meta+ArrowUp')
+  const marker = await page.evaluate(() => {
+    const line = [...document.querySelectorAll('.cm-line')].find((l) => l.textContent.includes('\\begin{abstract}'))
+    const top = line?.getBoundingClientRect().top ?? -1
+    const el = [...document.querySelectorAll('.cm-foldGutter .cm-gutterElement')].find((g) => Math.abs(g.getBoundingClientRect().top - top) < 4 && g.querySelector('span[title]'))
+    const r = el?.querySelector('span').getBoundingClientRect()
+    return r ? { x: r.x + r.width / 2, y: r.y + r.height / 2 } : null
+  })
+  if (marker) await page.mouse.click(marker.x, marker.y)
+  const folded = await page.locator('.cm-foldPlaceholder').count()
+  const hiddenText = !(await page.evaluate(() => document.querySelector('.cm-content').innerText.includes('A drop of sumi ink')))
+  if (folded) await page.locator('.cm-foldPlaceholder').first().click()
+  check('環境の折りたたみ', !!marker && folded === 1 && hiddenText, JSON.stringify({ marker: !!marker, folded, hiddenText }))
+
+  // アウトライン: \input をたどった見出し。押すとそのファイルのその行へ
+  const headings = await page.locator('#outline-list li').allTextContents()
+  await page.locator('#outline-list li', { hasText: 'Results' }).click()
+  await page.waitForTimeout(300)
+  const jumped = await page.locator('#file-name').textContent()
+  const activeHeading = await page.locator('#outline-list li.active').textContent().catch(() => '')
+  await page.locator('#outline-toggle').click()
+  const collapsed = await page.locator('#outline-list').isHidden()
+  await page.locator('#outline-toggle').click()
+  check(
+    'アウトライン',
+    headings.join(',') === 'Introduction,A simple model,Results' && jumped === 'sections/results.tex' && activeHeading === 'Results' && collapsed && (await page.locator('#outline-list').isVisible()),
+    `${headings.join(', ')} → ${jumped} (${activeHeading})`
+  )
+  await page.screenshot({ path: join(shots, '10-editor.png') })
 }
 
 check('コンソールにエラーなし', errors.length === 0, errors.slice(0, 3).join(' | '))
