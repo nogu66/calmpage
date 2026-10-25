@@ -45,6 +45,11 @@ Calmpage is a LaTeX editor that stays out of your way. The name says what it aim
 - Editor and PDF side by side, with flicker-free recompiles that keep your scroll position
 - *Auto compile*: save and compile 1.2 seconds after you stop typing
 - Errors in the editor and in a Problems list
+- Completion for commands, environments (with the matching `\end`), `\ref` labels and `\cite` keys from the whole project, file and image paths, and commands you define with `\newcommand`
+- An outline of the whole document in the sidebar, following `\input` and `\include`
+- Quiet highlighting of math, folding for environments and sections, and indentation inside environments
+- Spell check for English prose with the macOS spell checker (commands, math, labels, and comments are skipped)
+- Word and character counts for the file, the selection, or the whole document
 - SyncTeX both ways: ⌘J shows the cursor in the PDF, ⌘-click in the PDF jumps to the source
 - Multi-file projects with `% !TEX root`, `.latexmkrc`, and automatic engine selection
 - Reloads and recompiles when another editor or an agent changes a file
@@ -104,6 +109,12 @@ Open a folder (or a single `.tex` file) with ⌘O. Calmpage finds the root docum
 | Zoom the PDF in / out / fit to width | ⌘= / ⌘- / ⌘0 |
 | Settings | ⌘, or the gear at the bottom left |
 | Open the PDF in Preview | ⇧⌘O |
+| Bold / italic / emphasis | ⇧⌘B / ⌘I / ⇧⌘I |
+| Comment or uncomment lines | ⌘/ |
+| Show completions | ⌃Space (also suggests spellings for a misspelled word) |
+| Find / find and replace | ⌘F / ⌥⌘F |
+| Find next / previous | ⌘G / ⇧⌘G |
+| Go to line | ⌥⌘G |
 
 ### How Calmpage compiles
 

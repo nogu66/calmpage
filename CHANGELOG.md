@@ -4,6 +4,15 @@ All notable changes to Calmpage are listed here. The format follows [Keep a Chan
 
 ## Unreleased
 
+### Added
+
+- Completion for commands (with snippets), environments with the matching `\end`, `\ref` labels and `\cite` keys from the whole project, file and image paths, and commands defined with `\newcommand`.
+- An outline in the sidebar that follows `\input` and `\include`. Click a heading to jump to it.
+- Quiet math highlighting, folding for environments and sections, and indentation inside environments. Enter after `\begin{…}` closes the environment.
+- Spell check for English prose with the macOS spell checker, with suggestions on right-click or ⌃Space. It can be turned off in Settings.
+- Word and character counts below the editor, for the file, the selection, or the whole document.
+- Bold (⇧⌘B), italic (⌘I), and emphasis (⇧⌘I), and Undo, Redo, Find, Replace, Find Next, Go to Line, and Comment in the Edit menu.
+
 ## 0.3.0 - 2026-10-23
 
 ### Changed
