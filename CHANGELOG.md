@@ -34,6 +34,7 @@ All notable changes to Calmpage are listed here. The format follows [Keep a Chan
 - Spell check for English prose with the macOS spell checker, with suggestions on right-click or ⌃Space. It can be turned off in Settings.
 - Word and character counts below the editor, for the file, the selection, or the whole document.
 - Bold (⇧⌘B), italic (⌘I), and emphasis (⇧⌘I), and Undo, Redo, Find, Replace, Find Next, Go to Line, and Comment in the Edit menu.
+- Open several windows at once with File → New Window (⌃⌘N), each with its own folder, compiles, file watching, and agents. Opening a folder that is already open brings its window to the front; folders opened from Finder or the Dock go to the front window if it is empty, or to a new window. Closing a window asks only about that window's unsaved changes, ⌘Q asks window by window, and the open windows (folder, files, tabs, and position) are restored at the next launch. Close a window with ⇧⌘W.
 
 ### Fixed
 

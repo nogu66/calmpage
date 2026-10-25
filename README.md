@@ -64,6 +64,7 @@ Calmpage is a LaTeX editor that stays out of your way. The name says what it aim
 - Drop an image on the editor to copy it into the project (`figures/` or your existing image folder) and insert a `figure` environment. Drop files on the file list to copy them into a folder
 - Start a new document from a template: paper, Japanese paper (LuaLaTeX or upLaTeX), beamer slides, report, or letter
 - Recently opened folders in File → Open Recent
+- Several windows at once, each with its own folder. Each window compiles, watches for changes, and runs its agents on its own, and the open windows (with their files, tabs, and positions) come back the next time you start Calmpage
 - Find and replace across the folder, with match case, whole word, and regular expressions
 - Tabs for the files you open, restored the next time you open the folder
 - Local file history: every save keeps a version you can compare with and restore (no Git needed)
@@ -115,6 +116,8 @@ Open a folder (or a single `.tex` file) with ⌘O. Calmpage finds the root docum
 | New file | ⌘N |
 | New document from a template | ⇧⌘N |
 | New folder | ⌥⌘N |
+| New window | ⌃⌘N |
+| Close window | ⇧⌘W |
 | Rename, move to trash, show in Finder | Right-click in the file list |
 | Save and compile | ⌘S (automatic with *Auto compile*) |
 | Compile | ⌘R |

@@ -62,7 +62,8 @@ Calmpage is an [Electron](https://www.electronjs.org) app built with [electron-v
 
 | Path | What it does |
 | --- | --- |
-| `src/main/index.ts` | App entry: window, menus, IPC, settings changes |
+| `src/main/index.ts` | App entry: windows (opening, restoring, quitting), menus, IPC, settings changes |
+| `src/main/workspace.ts` | The state of one window: its folder, file watcher, compiles, agents, and unsaved-changes prompts |
 | `src/main/build.ts` | Runs `latexmk`, parses the log, and calls SyncTeX |
 | `src/main/files.ts` | Lists project files, watches for external changes, and creates, renames, and copies files |
 | `src/main/templates/` | The templates for New Document… (bundled as strings with `?raw`) |
