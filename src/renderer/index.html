@@ -128,6 +128,7 @@
               <svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14" /><path d="M12 5v14" /></svg>
             </button>
             <div id="agent-menu" role="menu" hidden></div>
+            <div id="agent-picker" hidden></div>
           </div>
           <button id="new-thread" class="icon-button" data-i18n-title="ai.newThread" data-i18n-aria="ai.newThread">
             <svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" /><path d="M18.375 2.625a1 1 0 0 1 3 3l-9.013 9.014a2 2 0 0 1-.853.505l-2.873.84a.5.5 0 0 1-.62-.62l.84-2.873a2 2 0 0 1 .506-.852z" /></svg>
@@ -210,27 +211,26 @@
           <p class="setting-hint" data-i18n="settings.agentsHint"></p>
           <ul id="agent-list" class="agent-list"></ul>
           <div class="agent-actions">
-            <button id="agent-browse" class="link-button" aria-expanded="false" data-i18n="settings.registry"></button>
             <button id="agent-restore" class="link-button" data-i18n="settings.restoreDefaults" data-i18n-title="settings.restoreHint"></button>
           </div>
-          <div id="registry" hidden>
-            <input id="registry-search" type="search" data-i18n-placeholder="settings.registrySearch" />
-            <p id="registry-status" class="setting-hint"></p>
-            <ul id="registry-list" class="registry-list"></ul>
+          <p class="agent-sub" data-i18n="settings.registry"></p>
+          <div id="settings-picker"></div>
+          <button id="agent-custom-open" class="link-button" aria-expanded="false" aria-controls="agent-custom" data-i18n="settings.customOpen"></button>
+          <div id="agent-custom" hidden>
+            <p id="agent-form-title" class="agent-form-title"></p>
+            <form id="agent-form" class="agent-form">
+              <input id="agent-form-name" required data-i18n-placeholder="settings.agentName" />
+              <input id="agent-form-command" required data-i18n-placeholder="settings.agentCommand" />
+              <div class="segmented" id="agent-form-kind">
+                <button type="button" data-value="acp" aria-pressed="true">ACP</button>
+                <button type="button" data-value="terminal" aria-pressed="false" data-i18n="settings.kindTerminal"></button>
+              </div>
+              <div class="agent-form-buttons">
+                <button type="button" id="agent-form-cancel" class="link-button" data-i18n="settings.agentCancel"></button>
+                <button type="submit" id="agent-form-submit" class="sheet-done"></button>
+              </div>
+            </form>
           </div>
-          <p id="agent-form-title" class="agent-form-title"></p>
-          <form id="agent-form" class="agent-form">
-            <input id="agent-form-name" required data-i18n-placeholder="settings.agentName" />
-            <input id="agent-form-command" required data-i18n-placeholder="settings.agentCommand" />
-            <div class="segmented" id="agent-form-kind">
-              <button type="button" data-value="acp" aria-pressed="true">ACP</button>
-              <button type="button" data-value="terminal" aria-pressed="false" data-i18n="settings.kindTerminal"></button>
-            </div>
-            <div class="agent-form-buttons">
-              <button type="button" id="agent-form-cancel" class="link-button" data-i18n="settings.agentCancel" hidden></button>
-              <button type="submit" id="agent-form-submit" class="sheet-done"></button>
-            </div>
-          </form>
         </div>
 
         <h3 data-i18n="settings.editor"></h3>

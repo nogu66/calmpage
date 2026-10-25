@@ -24,10 +24,45 @@ export const DEFAULT_AGENTS: AgentConfig[] = [
   { id: 'terminal', name: 'Terminal', kind: 'terminal', command: LOGIN_SHELL, args: ['-l'] }
 ]
 
-// 登録簿の 1 件。installed が false なら、この Mac に入っていない（専用のアプリを別に入れる必要がある）。
+// 登録簿の 1 件と、この Mac での使いみち。
+// ready はそのまま足せる（npx・uvx・PATH にあるもの）。install は配布物を取ってきて入れられる。
+export type RegistryStatus =
+  | { kind: 'ready'; agent: AgentConfig }
+  | { kind: 'install' }
+  | { kind: 'unavailable'; reason: 'npx' | 'uvx' | 'platform' }
+
 export interface RegistryAgent {
-  agent: AgentConfig
+  id: string
+  name: string
+  version: string
   description: string
   website: string | null
-  installed: boolean
+  status: RegistryStatus
+  // 設定のエージェントと照らし合わせる手がかり。npx / uvx はパッケージ名、binary は入れる場所
+  match: { package?: string; dir?: string }
+}
+
+// 入れている途中の様子。main から届く
+export type InstallProgress =
+  | { phase: 'download'; received: number; total: number | null }
+  | { phase: 'extract' }
+  | { phase: 'done' }
+  | { phase: 'failed'; error: string }
+
+// 「@scope/name@1.2.3」「name==0.1」から版を除く
+export function packageName(spec: string): string {
+  return spec.replace(/(?!^)@[^/@]*$/, '').replace(/[=<>~!]=.*$/, '')
+}
+
+// npx / uvx で動かす ACP のエージェントなら、そのパッケージ名
+export function agentPackage(agent: AgentConfig): string | null {
+  if (agent.kind !== 'acp' || !/(^|\/)(npx|uvx)$/.test(agent.command)) return null
+  const spec = agent.args.find((a) => !a.startsWith('-'))
+  return spec ? packageName(spec) : null
+}
+
+// 登録簿の件が、もう設定にあるか。既定の Claude Code と Codex は id が違うので、パッケージ名で比べる
+export function findAdded(entry: RegistryAgent, agents: AgentConfig[]): AgentConfig | undefined {
+  const { package: pkg, dir } = entry.match
+  return agents.find((a) => a.id === entry.id || (pkg && agentPackage(a) === pkg) || (dir && a.command.startsWith(`${dir}/`)))
 }

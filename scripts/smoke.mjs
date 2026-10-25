@@ -312,8 +312,9 @@ check(
 await page.locator('#ai-tabs .ai-tab', { hasText: 'Fake ACP 2' }).locator('.ai-tab-close').click()
 await page.locator('#ai-tabs .ai-tab-main', { hasText: /^Fake ACP$/ }).click()
 
-// 設定からエージェントを追加・削除する
+// 設定からエージェントを追加・削除する（手で書く欄は畳んであり、リンクで開く）
 await page.locator('#open-settings').click()
+await page.locator('#agent-custom-open').click()
 await page.locator('#agent-form-name').fill('Extra')
 await page.locator('#agent-form-command').fill('npx -y "some agent" --acp')
 await page.locator('#agent-form button[type="submit"]').click()
@@ -333,14 +334,13 @@ await page.waitForTimeout(300)
 const renamed = await page.locator('#agent-list .agent-row', { hasText: 'Shell (zsh)' }).count()
 check('エージェントの編集', editingCommand === '/bin/zsh -f' && renamed === 1 && (await page.locator('#agent-list .agent-row').count()) === 2, editingCommand)
 
-// 登録簿から探す（ネットから一覧を読む）
-await page.locator('#agent-browse').click()
-const listed = await waitFor(() => document.querySelectorAll('#registry-list .registry-row').length > 10, null, 20_000)
-const total = await page.locator('#registry-list .registry-row').count()
-await page.locator('#registry-search').fill('gemini')
-const filtered = await page.locator('#registry-list .registry-row').allTextContents()
+// 登録簿から探す（ネットから一覧を読む。設定には最初から出ている）
+const listed = await waitFor(() => document.querySelectorAll('#settings-picker .picker-row').length > 10, null, 20_000)
+const total = await page.locator('#settings-picker .picker-row').count()
+await page.locator('#settings-picker .picker-search').fill('gemini')
+const filtered = await page.locator('#settings-picker .picker-row').allTextContents()
 check('ACP の登録簿から探す', listed && filtered.length >= 1 && filtered.every((r) => /gemini/i.test(r)), `${total} 件 → 「gemini」で ${filtered.length} 件`)
-await page.locator('#agent-browse').click()
+await page.locator('#settings-picker .picker-search').fill('')
 
 // 元に戻す: 最初の 3 つが戻り、自分で足したものは残る
 await page.locator('#agent-restore').click()
@@ -1710,6 +1710,166 @@ await page.screenshot({ path: join(shots, '11-tabs.png') })
       JSON.stringify({ shown: shown.map(([f, n]) => [f.slice(-24), n]), windows: after.windows?.length })
     )
   }
+}
+
+// ---------- ACP の選択 ----------
+{
+  const { createHash } = await import('node:crypto')
+  const fake = resolve('scripts/fake-acp-agent.mjs')
+  // 入れる配布物の偽物: bin/smoke-agent（実行の印はわざと付けない）が、テスト用の ACP エージェントを起動する
+  const pack = mkdtempSync(join(tmpdir(), 'calmpage-pack-'))
+  mkdirSync(join(pack, 'bin'))
+  writeFileSync(join(pack, 'bin', 'smoke-agent'), `#!/bin/sh\nexec '${process.execPath}' '${fake}'\n`, { mode: 0o644 })
+  const archivePath = join(pack, 'smoke-agent.tar.gz')
+  spawnSync('tar', ['-czf', archivePath, '-C', pack, 'bin'])
+  const archive = readFileSync(archivePath)
+  const sha256 = createHash('sha256').update(archive).digest('hex')
+  const both = (target) => ({ 'darwin-aarch64': target, 'darwin-x86_64': target })
+  const base = 'https://smoke.invalid/'
+  const registry = {
+    version: '1.0.0',
+    agents: [
+      { id: 'smoke-linux', name: 'Smoke Linux Only', version: '1.0.0', description: 'Only for Linux', distribution: { binary: { 'linux-x86_64': { archive: `${base}x.tar.gz`, cmd: './x' } } } },
+      { id: 'smoke-install', name: 'Smoke Install', version: '1.0.0', description: 'Downloaded and unpacked by Calmpage', icon: `${base}huge.svg`, distribution: { binary: both({ archive: `${base}smoke-agent.tar.gz`, cmd: './bin/smoke-agent', sha256 }) } },
+      { id: 'smoke-badsum', name: 'Smoke Bad Checksum', version: '1.0.0', description: 'The checksum does not match', distribution: { binary: both({ archive: `${base}smoke-agent.tar.gz`, cmd: './bin/smoke-agent', sha256: '0'.repeat(64) }) } },
+      { id: 'smoke-ready', name: 'Smoke Ready', version: '1.0.0', description: 'Already on the PATH', distribution: { binary: both({ cmd: './sh', args: ['-c', `exec '${process.execPath}' '${fake}'`] }) } },
+      { id: 'claude-acp', name: 'Claude Agent', version: '9.9.9', description: 'ACP wrapper for Anthropic’s Claude', icon: `${base}claude.svg`, distribution: { npx: { package: '@agentclientprotocol/claude-agent-acp@9.9.9' } } }
+    ]
+  }
+  const svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><circle cx="8" cy="8" r="7" fill="currentColor"/></svg>'
+  // main の fetch を差し替える。offline の間は、つながらないときと同じく投げる
+  await app.evaluate((_electron, [registry, svg, archive]) => {
+    globalThis.__realFetch ??= globalThis.fetch
+    globalThis.__fetchOffline = true
+    globalThis.fetch = async (url) => {
+      const u = String(url)
+      if (globalThis.__fetchOffline) throw new TypeError('fetch failed')
+      if (u.endsWith('/registry.json')) return new Response(JSON.stringify(registry), { headers: { 'content-type': 'application/json' } })
+      if (u.endsWith('/claude.svg')) return new Response(svg, { headers: { 'content-type': 'image/svg+xml' } })
+      if (u.endsWith('/huge.svg')) return new Response(`<svg xmlns="http://www.w3.org/2000/svg">${' '.repeat(100_000)}</svg>`)
+      if (u.endsWith('/smoke-agent.tar.gz')) return new Response(Buffer.from(archive, 'base64'))
+      return new Response('', { status: 404 })
+    }
+    globalThis.__calmpageResetRegistry()
+  }, [registry, svg, archive.toString('base64')])
+  const agentsRoot = join(userData, 'agents')
+  // 前の版が残っていたら、新しい版を入れたときに片付く
+  mkdirSync(join(agentsRoot, 'smoke-install', '0.9.0'), { recursive: true })
+  const savedAgents = () => JSON.parse(readFileSync(join(userData, 'settings.json'), 'utf8')).agents
+  const pickerRows = () => page.evaluate(() => [...document.querySelectorAll('#agent-picker .picker-row')].map((r) => ({
+    id: r.dataset.id,
+    state: r.dataset.state,
+    action: r.querySelector('.picker-action')?.textContent ?? r.querySelector('.picker-reason')?.textContent ?? '',
+    icon: !!r.querySelector('.picker-icon').style.getPropertyValue('--icon'),
+    letter: r.querySelector('.picker-icon.letter')?.textContent ?? ''
+  })))
+  const openPicker = async () => {
+    await page.locator('#new-tab').click()
+    await page.locator('#agent-menu .agent-add').click()
+    await page.locator('#agent-picker .picker-search').waitFor({ state: 'visible' })
+  }
+  if (!(await page.locator('#ai-col').isVisible())) await page.locator('#toggle-ai').click()
+
+  // 1. 読めないとき（オフライン）は知らせ、「もう一度」で読み直す
+  await openPicker()
+  const offline = await waitFor(() => !document.querySelector('#agent-picker .picker-retry').hidden, null, 10_000)
+  const offlineText = await page.locator('#agent-picker .picker-status').textContent()
+  await app.evaluate(() => (globalThis.__fetchOffline = false))
+  await page.locator('#agent-picker .picker-retry').click()
+  const loaded = await waitFor(() => document.querySelectorAll('#agent-picker .picker-row').length === 5, null, 10_000)
+  check('ACP の選択: 読めないときは知らせて、もう一度読める', offline && /オフライン/.test(offlineText) && loaded, offlineText)
+
+  // 2. 「+」の「エージェントを追加…」で一覧が出る。並びは使える → 入れられる → 使えない、アイコンは data: URL か頭文字
+  await waitFor(() => !!document.querySelector('#agent-picker .picker-row[data-id="claude-acp"] .picker-icon:not(.letter)'), null, 10_000)
+  const rows = await pickerRows()
+  const byId = Object.fromEntries(rows.map((r) => [r.id, r]))
+  check(
+    'ACP の選択: 「+」から一覧が出る',
+    rows.map((r) => r.id).join(',') === 'claude-acp,smoke-ready,smoke-badsum,smoke-install,smoke-linux' &&
+      byId['smoke-ready'].action === '追加' && byId['smoke-install'].action === '入れる' && byId['smoke-linux'].state === 'unavailable' && /この Mac/.test(byId['smoke-linux'].action) &&
+      byId['claude-acp'].icon && byId['smoke-install'].letter === 'S',
+    rows.map((r) => `${r.id}:${r.state}:${r.action}${r.icon ? ':icon' : ''}`).join(' ')
+  )
+
+  // 3. 既定の Claude Code（id は claude）は、登録簿の claude-acp と同じパッケージなので追加済み
+  check('ACP の選択: 既定の Claude Code が追加済みと出る', byId['claude-acp'].state === 'added' && byId['claude-acp'].action === '開く', JSON.stringify(byId['claude-acp']))
+
+  // 4. 検索で絞り、↑↓ で選ぶ。Esc で閉じる
+  await page.keyboard.type('smoke')
+  const narrowed = (await pickerRows()).map((r) => r.id)
+  const firstActive = await page.locator('#agent-picker .picker-search').getAttribute('aria-activedescendant')
+  await page.keyboard.press('ArrowDown')
+  const secondActive = await page.locator('#agent-picker .picker-search').getAttribute('aria-activedescendant')
+  await page.keyboard.press('ArrowUp')
+  await page.keyboard.type(' bad')
+  const single = (await pickerRows()).map((r) => r.id)
+  await page.keyboard.press('Escape')
+  const closed = await page.locator('#agent-picker').isHidden()
+  check(
+    'ACP の選択: 検索で絞れて、↑↓ と Esc で操作できる',
+    narrowed.length === 4 && !narrowed.includes('claude-acp') && firstActive === 'picker-pillar-smoke-ready' && secondActive === 'picker-pillar-smoke-badsum' && single.join() === 'smoke-badsum' && closed,
+    `${narrowed.join(',')} / ${firstActive} → ${secondActive} / ${single.join(',')}`
+  )
+
+  // 5. ⏎ で足して、そのまま新しいタブで開く（設定画面を通らない）
+  await openPicker()
+  await page.keyboard.type('ready')
+  await page.keyboard.press('Enter')
+  const readyOpened = await waitFor(() => document.querySelector('#agent-picker').hidden && document.querySelector('#ai-tabs .ai-tab.active')?.textContent.includes('Smoke Ready'), null, 10_000)
+  const readyThread = await waitFor((t) => !!document.querySelector(`${t} .thread-hint`), thread, 20_000)
+  const readyAgent = savedAgents().find((a) => a.id === 'smoke-ready')
+  check('ACP の選択: 押すと足されてタブで開く', readyOpened && readyThread && readyAgent?.command === 'sh' && (await page.locator('#settings').isHidden()), JSON.stringify(readyAgent))
+
+  // 6. binary を取ってきて入れる: 展開し、実行できるようにして、絶対パスで足す。古い版は片付ける
+  await page.evaluate(() => {
+    window.__notes = []
+    new MutationObserver(() => {
+      for (const n of document.querySelectorAll('#agent-picker .picker-note')) if (!window.__notes.includes(n.textContent)) window.__notes.push(n.textContent)
+    }).observe(document.querySelector('#agent-picker'), { childList: true, subtree: true, characterData: true })
+  })
+  await openPicker()
+  await page.keyboard.type('smoke install')
+  await page.keyboard.press('Enter')
+  const installed = await waitFor(() => document.querySelector('#agent-picker').hidden && document.querySelector('#ai-tabs .ai-tab.active')?.textContent.includes('Smoke Install'), null, 30_000)
+  const installedThread = await waitFor((t) => !!document.querySelector(`${t} .thread-hint`), thread, 20_000)
+  const installedAgent = savedAgents().find((a) => a.id === 'smoke-install')
+  const binary = join(agentsRoot, 'smoke-install', '1.0.0', 'bin', 'smoke-agent')
+  const executable = existsSync(binary) && (statSync(binary).mode & 0o111) !== 0
+  const versions = existsSync(join(agentsRoot, 'smoke-install')) ? readdirSync(join(agentsRoot, 'smoke-install')) : []
+  const notes = await page.evaluate(() => window.__notes)
+  check(
+    'ACP の選択: binary を取ってきて展開し、絶対パスで足す',
+    installed && installedThread && installedAgent?.command === binary && executable && versions.join() === '1.0.0' && notes.some((n) => /取ってきています/.test(n)),
+    `${installedAgent?.command} / 版 ${versions.join(',')} / ${notes.join(' → ')}`
+  )
+
+  // 7. sha256 が合わなければ断り、何も足さない
+  await openPicker()
+  await page.keyboard.type('checksum')
+  await page.keyboard.press('Enter')
+  const refused = await waitFor(() => /照合値/.test(document.querySelector('#agent-picker .picker-note.failed')?.textContent ?? ''), null, 30_000)
+  const refusedText = await page.locator('#agent-picker .picker-note').first().textContent().catch(() => '')
+  const badLeft = existsSync(join(agentsRoot, 'smoke-badsum')) ? readdirSync(join(agentsRoot, 'smoke-badsum')) : []
+  await page.keyboard.press('Escape')
+  check('ACP の選択: sha256 が合わないと断る', refused && !savedAgents().some((a) => a.id === 'smoke-badsum') && badLeft.length === 0, `${refusedText} / 残り ${badLeft.join(',')}`)
+
+  // 8. 設定: 一覧は最初から出ていて、手で書く欄は畳んである。外したエージェントは、入れたファイルごと片付く
+  for (const name of ['Smoke Install', 'Smoke Ready']) await page.locator('#ai-tabs .ai-tab', { hasText: name }).locator('.ai-tab-close').click()
+  await page.locator('#open-settings').click()
+  const settingsShown = await waitFor(() => document.querySelectorAll('#settings-picker .picker-row').length === 5, null, 10_000)
+  const settingsClaude = await page.locator('#settings-picker .picker-row[data-id="claude-acp"] .picker-action').textContent()
+  const customHidden = await page.locator('#agent-custom').isHidden()
+  await page.locator('#agent-list .agent-row', { hasText: 'Smoke Install' }).locator('.agent-remove').click()
+  for (let i = 0; i < 30 && existsSync(join(agentsRoot, 'smoke-install')); i++) await page.waitForTimeout(100)
+  const cleaned = !existsSync(join(agentsRoot, 'smoke-install'))
+  await page.locator('#agent-list .agent-row', { hasText: 'Smoke Ready' }).locator('.agent-remove').click()
+  await page.keyboard.press('Escape')
+  check('ACP の選択: 設定に一覧を出し、手で書く欄は畳む。外すとファイルも片付く', settingsShown && settingsClaude === '追加済み' && customHidden && cleaned, JSON.stringify({ settingsShown, settingsClaude, customHidden, cleaned }))
+
+  await app.evaluate(() => {
+    globalThis.fetch = globalThis.__realFetch
+    globalThis.__calmpageResetRegistry()
+  })
 }
 
 check('コンソールにエラーなし', errors.length === 0, errors.slice(0, 3).join(' | '))

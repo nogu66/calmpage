@@ -74,7 +74,8 @@ Calmpage is an [Electron](https://www.electronjs.org) app built with [electron-v
 | `src/main/settings.ts` | Reads and writes settings (only values you changed are stored) |
 | `src/main/acp.ts` | Starts ACP agents and relays threads, permission requests, and file reads/writes |
 | `src/main/terminals.ts` | Starts terminal agents with node-pty |
-| `src/main/registry.ts` | Loads the ACP registry and turns it into addable agents |
+| `src/main/registry.ts` | Loads the ACP registry and its icons, and works out which agents can run on this Mac |
+| `src/main/installer.ts` | Downloads, checks, and unpacks agents distributed as their own program, into `userData/agents/` |
 | `src/main/shell-env.ts` | Reads the login shell environment, so the app works when opened from Finder |
 | `src/preload/index.ts` | The bridge between the window and the main process |
 | `src/shared/agents.ts` | Agent settings and the built-in agents |
@@ -89,6 +90,7 @@ Calmpage is an [Electron](https://www.electronjs.org) app built with [electron-v
 | `src/renderer/history.ts` | The File History sheet |
 | `src/renderer/diff.ts` | Line diffs for the File History sheet |
 | `src/renderer/latex/` | Writing aids: the LaTeX tokenizer (math, folding, indentation), completion, outline, spell check, word count, and formatting |
+| `src/renderer/agent-picker.ts` | The list for picking an ACP agent from the registry (in the AI panel and in Settings) |
 | `src/renderer/thread.ts` | The ACP thread view (replies, tool calls, diffs, permissions, plans) |
 | `src/renderer/terminal.ts` | The terminal view (xterm.js), themed to match the palette |
 | `src/renderer/style.css` | All styles; colors are CSS variables per palette and appearance |
