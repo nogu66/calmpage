@@ -8,6 +8,8 @@ export type { AgentConfig, AgentKind } from '../shared/agents'
 
 export type Theme = 'system' | 'light' | 'dark'
 export type Palette = 'paper' | 'moss' | 'sand'
+// 「自動」は書類の中身から選ぶ。書類の「% !TEX program」と .latexmkrc はこれより先に効く
+export type EngineSetting = 'auto' | 'pdflatex' | 'xelatex' | 'lualatex' | 'uplatex'
 
 export interface Settings {
   folder: string | null
@@ -26,9 +28,12 @@ export interface Settings {
   agents: AgentConfig[]
   agent: string
   aiWidth: number
+  engine: EngineSetting
+  // 書類から任意のプログラムを動かせるようになるので、既定は切っておく
+  shellEscape: boolean
 }
 
-const DEFAULTS: Settings = { folder: null, file: null, zoom: 1, auto: true, split: 0.5, sidebar: true, preview: true, theme: 'system', palette: 'paper', language: 'en', aiEnabled: true, ai: false, agents: DEFAULT_AGENTS, agent: 'claude', aiWidth: 440 }
+const DEFAULTS: Settings = { folder: null, file: null, zoom: 1, auto: true, split: 0.5, sidebar: true, preview: true, theme: 'system', palette: 'paper', language: 'en', aiEnabled: true, ai: false, agents: DEFAULT_AGENTS, agent: 'claude', aiWidth: 440, engine: 'auto', shellEscape: false }
 
 function path(): string {
   return join(app.getPath('userData'), 'settings.json')
