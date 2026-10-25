@@ -1525,7 +1525,8 @@ await page.screenshot({ path: join(shots, '11-tabs.png') })
   const page2 = await opened
   page2.on('console', (m) => m.type() === 'error' && errors.push(`[2] ${m.text()}`))
   page2.on('pageerror', (e) => errors.push(`[2] ${e}`))
-  await page2.waitForSelector('#status', { timeout: 10_000 })
+  // 空の窓ではステータスが隠れるので、見えるかではなく、ページにあるかを待つ
+  await page2.waitForSelector('#status', { state: 'attached', timeout: 10_000 })
   await page2.waitForFunction(() => document.body.classList.contains('empty'), null, { timeout: 10_000 }).catch(() => {})
   const id2 = await idOf(page2)
   const emptyAtFirst = await page2.evaluate(() => document.body.classList.contains('empty'))

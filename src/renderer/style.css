@@ -336,10 +336,12 @@ body.no-preview #preview-col {
   visibility: hidden;
 }
 
-/* 左下に設定ボタンを置くので、ファイル一覧の下に余白を空けておく */
+/* 左下に設定ボタン（窓の下から 5〜35px）を置くので、一覧がスクロールする範囲はその上で終える。
+   下の余白（padding）だけだと、途中までスクロールしたとき文字がボタンの後ろを通る */
 #sidebar {
   overflow-y: auto;
-  padding: 6px 4px 40px 8px;
+  padding: 6px 4px 8px 8px;
+  margin-bottom: calc(40px - var(--gap));
 }
 
 #file-list {
