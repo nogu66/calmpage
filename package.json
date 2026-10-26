@@ -1,7 +1,7 @@
 {
   "name": "calmpage",
   "productName": "Calmpage",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "description": "Calmpage: a quiet LaTeX editor for macOS with a live PDF preview and an optional AI panel",
   "license": "MIT",
   "author": "nogu66",
