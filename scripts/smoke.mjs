@@ -1378,6 +1378,8 @@ await page.screenshot({ path: join(shots, '11-tabs.png') })
   await page.keyboard.type('make bold')
   await page.keyboard.press('Alt+Shift+ArrowLeft')
   await clickMenu('太字')
+  // メニューは IPC で届くので、囲み終わるまで次のキーを送らない
+  await page.locator('.cm-line', { hasText: 'make \\textbf{bold}' }).waitFor({ timeout: 3000 }).catch(() => {})
   await page.keyboard.press('End')
   await page.keyboard.press('Meta+i')
   await page.keyboard.type('x')
