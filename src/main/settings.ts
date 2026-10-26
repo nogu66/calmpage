@@ -25,7 +25,6 @@ export interface Settings {
   // ファイルには 1 つめの窓の値も書いておく（windows を知らない前の版に戻しても、そのフォルダが開くように）
   folder: string | null
   file: string | null
-  zoom: number
   auto: boolean
   split: number
   sidebar: boolean
@@ -55,7 +54,7 @@ export interface Settings {
   outline: boolean
 }
 
-const DEFAULTS: Settings = { folder: null, file: null, zoom: 1, auto: true, split: 0.5, sidebar: true, preview: true, theme: 'system', palette: 'paper', language: 'en', aiEnabled: true, ai: false, agents: DEFAULT_AGENTS, agent: 'claude', aiWidth: 440, pdfView: 'width', pdfInvert: false, recent: [], tabs: [], windows: [], engine: 'auto', shellEscape: false, spellcheck: true, outline: true }
+const DEFAULTS: Settings = { folder: null, file: null, auto: true, split: 0.5, sidebar: true, preview: true, theme: 'system', palette: 'paper', language: 'en', aiEnabled: true, ai: false, agents: DEFAULT_AGENTS, agent: 'claude', aiWidth: 440, pdfView: 'width', pdfInvert: false, recent: [], tabs: [], windows: [], engine: 'auto', shellEscape: false, spellcheck: true, outline: true }
 
 function path(): string {
   return join(app.getPath('userData'), 'settings.json')

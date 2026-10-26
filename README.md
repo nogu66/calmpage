@@ -53,12 +53,14 @@ Calmpage is a LaTeX editor that stays out of your way. The name says what it aim
 - Spell check for English prose with the macOS spell checker (commands, math, labels, and comments are skipped)
 - Word and character counts for the file, the selection, or the whole document
 - SyncTeX both ways: ⌘J shows the cursor in the PDF, ⌘-click in the PDF jumps to the source
+- The PDF fits the window. Pinch or ⌘-scroll to zoom when you need to; it fits again when you switch documents or views
 - A PDF viewer that works like one: clickable links (contents, `\ref`, `\cite`, URLs), text you can select and copy, search inside the PDF, page numbers, and fit width / whole page / two pages side by side
 - Optional dark pages: invert the PDF in dark mode (off by default)
 - Multi-file projects with `% !TEX root`, `% !TEX program`, `.latexmkrc`, and automatic engine selection
 - Saving a `.bib`, `.sty`, or `.cls` file recompiles the document that uses it
 - Reloads and recompiles when another editor or an agent changes a file
 - Never loses your work: unsaved changes are written before you quit, close the window, or switch folders. If saving fails, or *Auto compile* is off, you get the usual Save / Don't Save / Cancel
+- A file list where folders open and close with a click. They start closed, and the folder of the file you open opens by itself
 - Manage files from the file list (right-click) or the File menu: new file, new folder, rename, move to trash, show in Finder
 - The file list also shows images and other project files (`.csv`, `.md`, `.bbx`, `.dtx`, …). Text files open in the editor; images and PDFs open in Quick Look
 - Drop an image on the editor to copy it into the project (`figures/` or your existing image folder) and insert a `figure` environment. Drop files on the file list to copy them into a folder

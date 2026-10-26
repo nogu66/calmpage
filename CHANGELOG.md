@@ -2,6 +2,13 @@
 
 All notable changes to Calmpage are listed here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## Unreleased
+
+### Changed
+
+- Folders in the file list open and close with a click, like a tree. They start closed, and the folder of the file you open (or switch to) opens by itself. A folder you close stays closed until you move to a file inside it.
+- The PDF zoom is no longer remembered. The PDF fits the window when Calmpage starts, when you switch documents or folders, and when you change between fit width, whole page, and two pages; pinch or ⌘-scroll to zoom in between.
+
 ## 0.4.1 - 2026-10-26
 
 ### Added

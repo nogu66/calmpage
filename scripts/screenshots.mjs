@@ -42,6 +42,8 @@ async function compiled(page) {
 }
 
 async function openFile(page, name) {
+  // ファイル一覧のフォルダは閉じて出るので、開いてから選ぶ
+  for (const dir of await page.locator('#file-list li.dir:not(.open)').all()) await dir.click()
   await page.locator('#file-list li.file', { hasText: name }).first().click()
   await page.waitForTimeout(300)
   await compiled(page)

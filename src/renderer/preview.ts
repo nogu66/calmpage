@@ -156,8 +156,10 @@ export class Preview {
     this.hooks.onChange()
   }
 
+  // 別の書類やフォルダに移ったら、拡大はやめて窓に合わせ直す
   clear(): void {
     this.generation++
+    this.zoom = 1
     for (const v of this.pages) this.observer.unobserve(v.el)
     this.pages = []
     this.visible.clear()
@@ -202,11 +204,12 @@ export class Preview {
     this.hooks.onChange()
   }
 
-  // 幅に合わせる・ページ全体・見開き。切り替えても、見ていたページはそのまま
+  // 幅に合わせる・ページ全体・見開き。切り替えると拡大はやめて合わせ直す。見ていたページはそのまま
   setView(view: PdfView): void {
     if (view === this.view) return
     const page = this.currentPage()
     this.view = view
+    this.zoom = 1
     this.scroller.querySelector('.pages')?.classList.toggle('spread', view === 'spread')
     this.relayout()
     if (page) this.goToPage(page)

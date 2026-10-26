@@ -64,6 +64,16 @@ const clickMenu = (label) =>
     find(Menu.getApplicationMenu().items)?.click(undefined, BrowserWindow.getAllWindows()[0])
   }, label)
 
+// ファイル一覧は閉じたフォルダの中を出さないので、path の上にあるフォルダを外側から順に開く
+const openDirs = (path) =>
+  page.evaluate((path) => {
+    for (;;) {
+      const closed = [...document.querySelectorAll('#file-list li.dir:not(.open)')].find((li) => path.startsWith(li.dataset.path + '/'))
+      if (!closed) return
+      closed.click()
+    }
+  }, path)
+
 // 1. 開いた直後に組版され、PDF が表示される
 let state = await waitStatus(['ok', 'warning', 'error'])
 await page.waitForSelector('.page canvas', { timeout: 30_000 }).catch(() => {})
@@ -611,15 +621,21 @@ const sharp = await page.evaluate((n) => {
   const p = document.querySelector(`#pdf-scroll .page[data-page="${n}"]`)
   return Math.abs(p.querySelector(':scope > canvas').width - p.clientWidth * devicePixelRatio) <= devicePixelRatio
 }, pinchIn.page)
-const savedZoom = savedSettings().zoom
+// 拡大は一時的なもの。設定には残さず、表示を切り替えると窓に合わせ直す
+const zoomSaved = 'zoom' in savedSettings()
 const wheelOut = await pinch(100, 'metaKey')
+await page.locator('#pdf-views button[data-value="page"]').click()
+await page.locator('#pdf-views button[data-value="width"]').click()
+await page.waitForTimeout(300)
+const zoomRefit = await page.locator('#pdf-zoom').textContent()
+await pinch(-10)
 await clickMenu('PDF を幅に合わせる')
 await page.waitForTimeout(300)
 const zoomReset = await page.locator('#pdf-zoom').textContent()
 check(
-  'PDF: ピンチと ⌘ + スクロールで拡大・縮小（指の下の点は動かない）',
-  parseInt(pinchIn.zoom) > parseInt(zoomBefore) && pinchIn.same && pinchIn.drift < 0.01 && sharp && savedZoom > 1 && parseInt(wheelOut.zoom) < parseInt(pinchIn.zoom) && zoomReset === zoomBefore,
-  JSON.stringify({ zoomBefore, pinchIn, sharp, savedZoom, wheelOut, zoomReset })
+  'PDF: ピンチと ⌘ + スクロールで拡大・縮小（指の下の点は動かない）。拡大は残さず、表示を替えると合わせ直す',
+  parseInt(pinchIn.zoom) > parseInt(zoomBefore) && pinchIn.same && pinchIn.drift < 0.01 && sharp && !zoomSaved && parseInt(wheelOut.zoom) < parseInt(pinchIn.zoom) && zoomRefit === zoomBefore && zoomReset === zoomBefore,
+  JSON.stringify({ zoomBefore, pinchIn, sharp, zoomSaved, wheelOut, zoomRefit, zoomReset })
 )
 
 // ダークモードでの反転（既定は切）。暗いときだけ反転し、明るいときはそのまま
@@ -689,12 +705,15 @@ unlinkSync(longDoc)
   const hadPdf = fs.existsSync(builtPdf)
   if (!hadPdf) fs.writeFileSync(builtPdf, '%PDF-1.4\n')
   fs.mkdirSync(join(folder, 'empty-dir'))
-  const shownAll = await waitFor(([p, c, n, e]) => {
+  // フォルダは閉じて出るので、中の画像はフォルダを開いてから見える
+  const shownAll = await waitFor(([f, c, n, e]) => {
     const paths = [...document.querySelectorAll('#file-list li[data-path]')].map((li) => li.dataset.path)
-    return [p, c, n, e].every((x) => paths.includes(x))
-  }, [plot, csv, notes, join(folder, 'empty-dir')], 8000)
+    return [f, c, n, e].every((x) => paths.includes(x))
+  }, [figures, csv, notes, join(folder, 'empty-dir')], 8000)
+  const closedFirst = !(await listedPaths()).includes(plot)
+  await openDirs(plot)
   const listed = await listedPaths()
-  check('関連ファイルも一覧に出す', shownAll && !listed.includes(builtPdf), listed.map((p) => p.slice(folder.length + 1)).join(', '))
+  check('関連ファイルも一覧に出す', shownAll && closedFirst && listed.includes(plot) && !listed.includes(builtPdf), listed.map((p) => p.slice(folder.length + 1)).join(', '))
   if (!hadPdf) fs.unlinkSync(builtPdf)
 
   // 2. .tex 以外のテキストを開いて書ける。外部で変わったら読み直すが、組み直さない
@@ -1022,12 +1041,32 @@ await clickMenu('タブを閉じる') // smoke-search-a.tex
 unlinkSync(sa)
 unlinkSync(sb)
 await fileItem(filePath).click()
+await openDirs(intro)
 await fileItem(intro).click()
 await fileItem(model).click()
 await waitStatus(['ok', 'warning', 'error'])
 let tabs = await tabPaths()
 const rootTab = await page.evaluate(() => document.querySelector('#tabs .tab.root')?.dataset.path ?? null)
 check('タブ: 開いたファイルが並び、本体に印', tabs.includes(filePath) && tabs.includes(intro) && tabs.includes(model) && (await activeTab()) === model && rootTab === filePath, `${tabs.map((p) => p.slice(folder.length + 1)).join(', ')} / 本体 ${rootTab?.slice(folder.length + 1)}`)
+
+// ファイル一覧のフォルダ: 押すと開け閉めでき、閉じたら組み直しても開き直さない。別のファイルへ移ると、そのフォルダを開いて見せる
+{
+  const listedNow = () => page.evaluate(() => [...document.querySelectorAll('#file-list li[data-path]')].map((li) => li.dataset.path))
+  const sectionsRow = fileItem(join(folder, 'sections'))
+  const shownWithActive = (await listedNow()).includes(model) && (await sectionsRow.getAttribute('aria-expanded')) === 'true'
+  await sectionsRow.click()
+  const closed = !(await listedNow()).includes(model) && (await sectionsRow.getAttribute('aria-expanded')) === 'false'
+  await clickMenu('コンパイル')
+  await waitStatus(['ok', 'warning', 'error'])
+  const staysClosed = !(await listedNow()).includes(model)
+  await page.locator(`#tabs .tab[data-path="${filePath}"]`).click()
+  await page.locator(`#tabs .tab[data-path="${intro}"]`).click()
+  await page.waitForTimeout(300)
+  const revealed = (await listedNow()).includes(intro)
+  check('ファイル一覧: フォルダを開け閉めし、移ったファイルのフォルダを開く', shownWithActive && closed && staysClosed && revealed, JSON.stringify({ shownWithActive, closed, staysClosed, revealed }))
+  await page.locator(`#tabs .tab[data-path="${model}"]`).click()
+  await waitStatus(['ok', 'warning', 'error'])
+}
 
 // 未保存の印を付け、⌘W で保存してから閉じる（自動保存より先に閉じる）
 const modelBefore = readFileSync(model, 'utf8')

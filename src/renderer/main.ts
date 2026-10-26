@@ -198,39 +198,85 @@ function dirOf(path: string): string {
 let naming = false
 let refreshPending = false
 
-// 一番上にフォルダ直下のファイル、続いてフォルダごとに見出しとファイルを並べる。空のフォルダも見出しだけ出す
+// 開いているサブフォルダ。既定は閉じていて、開いたファイルのあるフォルダだけ自動で開く
+let expanded = new Set<string>()
+let revealed: string | null = null
+
 async function refreshFiles(): Promise<void> {
   if (naming) return void (refreshPending = true)
   const entries = folder ? await sumi.listEntries() : { files: [], emptyDirs: [] }
   if (naming) return void (refreshPending = true)
   files = entries.files
   emptyDirs = entries.emptyDirs
-  const groups = new Map<string, string[]>()
-  for (const path of files) {
-    const group = groups.get(dirOf(path)) ?? []
-    group.push(path)
-    groups.set(dirOf(path), group)
-  }
-  for (const d of emptyDirs) groups.set(d, [])
-  const dirs = [...groups.keys()].sort((a, b) => (a === folder ? -1 : b === folder ? 1 : a.localeCompare(b)))
+  renderFiles()
+}
+
+// 階層ごとに、ファイルを先に、続いてサブフォルダを並べる。閉じたフォルダの中は出さない。空のフォルダも出す
+function renderFiles(): void {
   const list = $('file-list')
   list.replaceChildren()
-  for (const d of dirs) {
-    if (d !== folder) {
-      const head = element('li', 'dir', relative(d))
-      head.title = relative(d)
-      head.dataset.path = d
-      list.append(head)
+  const root = folder
+  if (root) {
+    const nodes = new Map<string, { files: string[]; dirs: Set<string> }>()
+    const node = (d: string) => {
+      let n = nodes.get(d)
+      if (!n) nodes.set(d, (n = { files: [], dirs: new Set() }))
+      return n
     }
-    for (const path of groups.get(d) ?? []) {
-      const li = element('li', 'file', baseName(path))
-      li.dataset.path = path
-      li.title = relative(path)
-      li.addEventListener('click', () => void openFile(path))
-      list.append(li)
+    // 中にファイルが無く、サブフォルダだけがあるフォルダも、親から辿れるようにする
+    const addDir = (d: string): void => {
+      for (; d !== root && d.startsWith(root + '/'); d = dirOf(d)) {
+        node(d)
+        node(dirOf(d)).dirs.add(d)
+      }
     }
+    node(root)
+    for (const path of files) {
+      node(dirOf(path)).files.push(path)
+      addDir(dirOf(path))
+    }
+    for (const d of emptyDirs) addDir(d)
+    const walk = (d: string, depth: number): void => {
+      const n = nodes.get(d)
+      if (!n) return
+      for (const path of n.files) {
+        const li = element('li', 'file', baseName(path))
+        li.dataset.path = path
+        li.title = relative(path)
+        li.style.setProperty('--depth', String(depth))
+        li.addEventListener('click', () => void openFile(path))
+        list.append(li)
+      }
+      for (const sub of [...n.dirs].sort((a, b) => a.localeCompare(b))) {
+        const open = expanded.has(sub)
+        const head = element('li', 'dir', baseName(sub))
+        head.dataset.path = sub
+        head.title = relative(sub)
+        head.style.setProperty('--depth', String(depth))
+        head.classList.toggle('open', open)
+        head.setAttribute('aria-expanded', String(open))
+        head.addEventListener('click', () => {
+          if (naming) return
+          if (!expanded.delete(sub)) expanded.add(sub)
+          renderFiles()
+        })
+        list.append(head)
+        if (open) walk(sub, depth + 1)
+      }
+    }
+    walk(root, 0)
   }
   markActiveFile()
+}
+
+// フォルダ dir と、その上のフォルダをすべて開く。新しく開いたものがあれば true
+function expandDir(dir: string): boolean {
+  let changed = false
+  for (let d = dir; folder && d !== folder && d.startsWith(folder + '/'); d = dirOf(d)) {
+    if (!expanded.has(d)) changed = true
+    expanded.add(d)
+  }
+  return changed
 }
 
 // ---------- ファイル操作（新規・名前の変更・ゴミ箱・ドロップ） ----------
@@ -293,10 +339,13 @@ function freshName(dir: string, kind: 'file' | 'folder'): string {
 
 async function newEntry(kind: 'file' | 'folder', dir = defaultDir()): Promise<void> {
   if (!folder || !dir) return openTemplates()
+  if (dir !== folder && expandDir(dir)) renderFiles()
   const li = element('li', kind === 'file' ? 'file' : 'dir')
   const head = listItem(dir)
-  if (head && dir !== folder) head.after(li)
-  else $('file-list').prepend(li)
+  if (head && dir !== folder) {
+    li.style.setProperty('--depth', String(Number(head.style.getPropertyValue('--depth') || 0) + 1))
+    head.after(li)
+  } else $('file-list').prepend(li)
   const name = await askName(li, freshName(dir, kind))
   li.remove()
   if (!name) return
@@ -310,6 +359,7 @@ function onMoved(from: string, to: string): void {
   const move = (p: string): string => (p === from ? to : p.startsWith(from + '/') ? to + p.slice(from.length) : p)
   const was = editor.path
   editor.rename(from, to)
+  expanded = new Set([...expanded].map(move))
   if (lastRoot) lastRoot = move(lastRoot)
   const moved = fileTabs.paths.map(move)
   fileTabs.set(moved)
@@ -418,7 +468,9 @@ function setupFiles(): void {
     const li = (e.target as HTMLElement).closest<HTMLElement>('#file-list li[data-path]')
     const at = li?.dataset.path
     if (!folder || !dropped.length) return
-    void importDropped(dropped, li && at ? (li.classList.contains('dir') ? at : dirOf(at)) : undefined).then(() => refreshFiles())
+    const dir = li && at ? (li.classList.contains('dir') ? at : dirOf(at)) : undefined
+    if (dir) expandDir(dir)
+    void importDropped(dropped, dir).then(() => refreshFiles())
   })
 }
 
@@ -451,6 +503,11 @@ function setupTemplates(): void {
 }
 
 function markActiveFile(): void {
+  // 開いたファイルが閉じたフォルダの中なら開いて見せる。ファイルが替わったときだけ（自分で閉じたのは開き直さない）
+  if (editor.path !== revealed) {
+    revealed = editor.path
+    if (editor.path && expandDir(dirOf(editor.path))) return renderFiles()
+  }
   for (const li of $('file-list').querySelectorAll<HTMLElement>('li.file')) {
     li.classList.toggle('active', li.dataset.path === editor.path)
     li.classList.toggle('root', li.dataset.path === lastRoot)
@@ -1430,7 +1487,6 @@ function handleMenu(command: string): void {
     case 'find-pdf':
       return pdfBar.openFind()
   }
-  sumi.saveSettings({ zoom: preview.zoom })
 }
 
 async function cleanAux(): Promise<void> {
@@ -1457,6 +1513,8 @@ async function onFolderOpened(next: string, file: string | null): Promise<void> 
   setStatus('idle', 'status.idle')
   $('engine').textContent = ''
   writing.setFolder(next)
+  expanded = new Set()
+  revealed = null
   await refreshFiles()
   // 前に並べていたタブを戻す（このフォルダにあって、今もあるものだけ）
   fileTabs.set((settings.tabs ?? []).filter((p) => files.includes(p)))
@@ -1596,7 +1654,6 @@ async function init(): Promise<void> {
   setSplit(initial.split)
   setSidebarShown(initial.sidebar)
   setPreviewShown(initial.preview)
-  preview.zoom = initial.zoom
   setupDivider()
   setAiWidth(initial.aiWidth)
   setupAi()

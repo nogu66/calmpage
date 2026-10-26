@@ -350,34 +350,35 @@ body.no-preview #preview-col {
   padding: 0;
 }
 
+/* 一段ごとに、フォルダの印（4px）と名前の間（8px）だけ下げるので、中のファイルはフォルダ名と頭がそろう */
 #file-list li {
-  padding: 4px 10px;
+  padding: 4px 10px 4px calc(10px + var(--depth, 0) * 12px);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-
-#file-list li.dir {
-  color: var(--muted);
-  font-size: 11px;
-  margin-top: 12px;
-  direction: rtl;
-  text-align: left;
-}
-
-#file-list li.dir:first-child {
-  margin-top: 0;
-}
-
-#file-list li.file {
   cursor: default;
   border-radius: 7px;
   margin: 1px 0;
   color: var(--muted);
 }
 
-#file-list li.file:hover {
+#file-list li:hover {
   background: var(--hover);
+}
+
+#file-list li.dir::before {
+  content: '';
+  display: inline-block;
+  vertical-align: 1px;
+  margin-right: 8px;
+  border-left: 4px solid currentColor;
+  border-top: 3.5px solid transparent;
+  border-bottom: 3.5px solid transparent;
+  transition: transform 0.12s;
+}
+
+#file-list li.dir.open::before {
+  transform: rotate(90deg);
 }
 
 #file-list li.file.active {
@@ -389,8 +390,12 @@ body.no-preview #preview-col {
 
 /* 名前の入力（新しいファイル・フォルダ、名前の変更） */
 #file-list li.naming {
-  padding: 1px 4px;
+  padding: 1px 4px 1px calc(4px + var(--depth, 0) * 12px);
   overflow: visible;
+}
+
+#file-list li.naming::before {
+  display: none;
 }
 
 #file-list .name-input {
