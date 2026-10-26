@@ -2,6 +2,12 @@
 
 All notable changes to Calmpage are listed here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## Unreleased
+
+### Added
+
+- Zoom the PDF by pinching on the trackpad or scrolling with ⌘ held. The spot under the pointer stays in place, and the pages are redrawn sharply when you stop. The zoom is remembered, and ⌘0 still fits the width.
+
 ## 0.4.0 - 2026-10-26
 
 ### Added

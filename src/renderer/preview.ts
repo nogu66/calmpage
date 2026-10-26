@@ -177,6 +177,31 @@ export class Preview {
     this.relayout()
   }
 
+  // ピンチや ⌘ + スクロールでの拡大。指の下の点を動かさない。
+  // 手を動かしている間は今の絵を引き伸ばすだけにして、止まってから描き直す
+  private renderTimer = 0
+  zoomAt(zoom: number, clientX: number, clientY: number): void {
+    if (!this.pages.length || this.scroller.clientWidth < 100) return
+    const hit = document.elementFromPoint(clientX, clientY)?.closest('.page')
+    const view = this.pages.find((v) => v.el === hit) ?? this.pages[Math.max(0, this.currentPage() - 1)]
+    const before = view.el.getBoundingClientRect()
+    const x = (clientX - before.left) / this.scale
+    const y = (clientY - before.top) / this.scale
+    this.zoom = Math.min(4, Math.max(0.3, zoom))
+    const scale = this.fitScale(this.pages[0].page)
+    if (Math.abs(scale - this.scale) < 0.001) return
+    this.scale = scale
+    for (const v of this.pages) this.size(v.el, v.page, scale)
+    const after = view.el.getBoundingClientRect()
+    this.scroller.scrollLeft += after.left + x * scale - clientX
+    this.scroller.scrollTop += after.top + y * scale - clientY
+    clearTimeout(this.renderTimer)
+    this.renderTimer = window.setTimeout(() => {
+      for (const v of this.visible) void this.render(v, this.scale)
+    }, 150)
+    this.hooks.onChange()
+  }
+
   // 幅に合わせる・ページ全体・見開き。切り替えても、見ていたページはそのまま
   setView(view: PdfView): void {
     if (view === this.view) return

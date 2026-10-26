@@ -585,6 +585,43 @@ check(
   JSON.stringify({ widthView, pageView, spreadView, savedView })
 )
 
+// ピンチ（ctrlKey 付きの wheel）と ⌘ + スクロールで拡大。指の下の点は動かず、止まると描き直す
+const pinch = (deltaY, key = 'ctrlKey') =>
+  page.evaluate(
+    ({ deltaY, key }) => {
+      const scroller = document.querySelector('#pdf-scroll')
+      const box = scroller.getBoundingClientRect()
+      const [x, y] = [box.left + box.width * 0.3, box.top + box.height * 0.4]
+      const where = () => {
+        const p = document.elementFromPoint(x, y).closest('.page')
+        const r = p.getBoundingClientRect()
+        return { page: p.dataset.page, fx: (x - r.left) / r.width, fy: (y - r.top) / r.height }
+      }
+      const before = where()
+      for (let i = 0; i < 5; i++) scroller.dispatchEvent(new WheelEvent('wheel', { deltaY, clientX: x, clientY: y, [key]: true, bubbles: true, cancelable: true }))
+      const after = where()
+      return { zoom: document.querySelector('#pdf-zoom').textContent, page: after.page, same: before.page === after.page, drift: Math.max(Math.abs(before.fx - after.fx), Math.abs(before.fy - after.fy)) }
+    },
+    { deltaY, key }
+  )
+const zoomBefore = await page.locator('#pdf-zoom').textContent()
+const pinchIn = await pinch(-10)
+await page.waitForTimeout(800)
+const sharp = await page.evaluate((n) => {
+  const p = document.querySelector(`#pdf-scroll .page[data-page="${n}"]`)
+  return Math.abs(p.querySelector(':scope > canvas').width - p.clientWidth * devicePixelRatio) <= devicePixelRatio
+}, pinchIn.page)
+const savedZoom = savedSettings().zoom
+const wheelOut = await pinch(100, 'metaKey')
+await clickMenu('PDF を幅に合わせる')
+await page.waitForTimeout(300)
+const zoomReset = await page.locator('#pdf-zoom').textContent()
+check(
+  'PDF: ピンチと ⌘ + スクロールで拡大・縮小（指の下の点は動かない）',
+  parseInt(pinchIn.zoom) > parseInt(zoomBefore) && pinchIn.same && pinchIn.drift < 0.01 && sharp && savedZoom > 1 && parseInt(wheelOut.zoom) < parseInt(pinchIn.zoom) && zoomReset === zoomBefore,
+  JSON.stringify({ zoomBefore, pinchIn, sharp, savedZoom, wheelOut, zoomReset })
+)
+
 // ダークモードでの反転（既定は切）。暗いときだけ反転し、明るいときはそのまま
 await page.locator('#open-settings').click()
 const invertDefault = await page.locator('#settings-pdf-invert').isChecked()

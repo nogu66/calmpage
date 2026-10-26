@@ -133,7 +133,7 @@ Open a folder (or a single `.tex` file) with ⌘O. Calmpage finds the root docum
 | File history | File → File History… |
 | Show or hide the PDF preview | ⇧⌘P, or the button at the right of the title bar |
 | AI panel | ⇧⌘L, or the button at the right of the title bar |
-| Zoom the PDF in / out / fit to width | ⌘= / ⌘- / ⌘0 |
+| Zoom the PDF in / out / fit to width | Pinch on the trackpad or ⌘-scroll, or ⌘= / ⌘- / ⌘0 |
 | Find in the PDF | ⌥⇧⌘F, or ⌘F while the PDF has focus (⏎ next, ⇧⏎ previous) |
 | Previous / next page | ← / → while the PDF has focus, or type a number in the bar above the PDF |
 | Follow a link in the PDF | Click it (⌘-click still jumps to the source) |

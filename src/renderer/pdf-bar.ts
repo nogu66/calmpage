@@ -32,6 +32,22 @@ export class PdfBar {
       e.preventDefault()
     })
 
+    // トラックパッドのピンチは、Chromium では ctrlKey 付きの wheel として届く。⌘ + スクロールも同じに扱う
+    let saveTimer = 0
+    scroller.addEventListener(
+      'wheel',
+      (e) => {
+        if (!e.ctrlKey && !e.metaKey) return
+        e.preventDefault()
+        const delta = e.deltaMode === WheelEvent.DOM_DELTA_LINE ? e.deltaY * 16 : e.deltaY
+        // マウスのホイールは 1 目盛りが 100 前後と大きいので、1 回で 1.3 倍ほどに抑える
+        this.preview.zoomAt(this.preview.zoom * Math.exp(-Math.max(-25, Math.min(25, delta)) * 0.01), e.clientX, e.clientY)
+        clearTimeout(saveTimer)
+        saveTimer = window.setTimeout(() => this.deps.sumi.saveSettings({ zoom: this.preview.zoom }), 400)
+      },
+      { passive: false }
+    )
+
     const pageInput = $<HTMLInputElement>('pdf-page')
     pageInput.addEventListener('focus', () => pageInput.select())
     pageInput.addEventListener('keydown', (e) => {

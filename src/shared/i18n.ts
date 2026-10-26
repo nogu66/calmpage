@@ -209,7 +209,7 @@ const en = {
   'build.noLatexmk': 'Cannot start latexmk: {detail}',
 
   'pdf.page': 'Page (← → to turn)',
-  'pdf.zoomHint': 'Zoom (⌘= / ⌘- / ⌘0)',
+  'pdf.zoomHint': 'Zoom (pinch, ⌘-scroll, or ⌘= / ⌘- / ⌘0)',
   'pdf.viewWidth': 'Fit width',
   'pdf.viewPage': 'Whole page',
   'pdf.viewSpread': 'Two pages',
@@ -505,7 +505,7 @@ const ja: Record<Key, Entry> = {
   'build.noLatexmk': 'latexmk を起動できません: {detail}',
 
   'pdf.page': 'ページ（← → でめくる）',
-  'pdf.zoomHint': '拡大率（⌘= / ⌘- / ⌘0）',
+  'pdf.zoomHint': '拡大率（ピンチ、⌘ + スクロール、⌘= / ⌘- / ⌘0）',
   'pdf.viewWidth': '幅に合わせる',
   'pdf.viewPage': 'ページ全体',
   'pdf.viewSpread': '見開き',
